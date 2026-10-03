@@ -6,6 +6,7 @@ No credentials required. Run with `make smoke-pipeline`.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from pathlib import Path
 
@@ -17,7 +18,13 @@ from app.services.coach_pipeline import CoachPipeline  # noqa: E402
 
 
 async def run() -> int:
-    settings = Settings()
+    # Offline by default so it never spends credits. Set SMOKE_REAL=1 to use .env providers.
+    if os.environ.get("SMOKE_REAL") == "1":
+        settings = Settings()
+    else:
+        settings = Settings(
+            decision_provider="mock", language_provider="mock", voice_provider="disabled"
+        )
     pipeline = CoachPipeline(settings)
     failures = 0
 

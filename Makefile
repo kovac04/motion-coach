@@ -1,4 +1,4 @@
-.PHONY: install install-backend install-frontend backend frontend test test-backend build lint smoke smoke-gemini smoke-elevenlabs smoke-jev clean
+.PHONY: install install-backend install-frontend backend frontend test test-backend build lint smoke smoke-pipeline smoke-gemini smoke-elevenlabs smoke-jev clean
 
 install: install-backend install-frontend
 
@@ -27,7 +27,10 @@ lint:
 
 # Real-provider smoke tests. Each consumes (a little) paid quota — run on purpose.
 smoke:
-	@echo "Run one of: make smoke-gemini | make smoke-elevenlabs | make smoke-jev"
+	@echo "Run one of: make smoke-pipeline | make smoke-gemini | make smoke-elevenlabs | make smoke-jev"
+
+smoke-pipeline:
+	cd backend && uv run python ../scripts/smoke_pipeline.py
 
 smoke-gemini:
 	cd backend && uv run python ../scripts/smoke_gemini.py

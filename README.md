@@ -82,6 +82,7 @@ make test-backend     # backend tests only
 make build            # frontend production build
 make lint             # frontend oxlint
 make smoke            # list smoke tests
+make smoke-pipeline   # offline full pipeline over all scenarios (no keys)
 make smoke-gemini     # one real Gemini request (needs GEMINI_API_KEY)
 make smoke-elevenlabs # one real ElevenLabs request (needs key + voice id)
 make smoke-jev        # gated until Jev contract verified (see docs/JEV_PROVIDER.md)

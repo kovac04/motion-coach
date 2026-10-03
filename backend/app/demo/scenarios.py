@@ -113,6 +113,49 @@ _BUILDERS = {
 }
 
 
+def custom_set(
+    exercise_id: str = EXERCISE_ID,
+    duration_ratio: float = 1.0,
+    rom_ratio: float = 1.0,
+    similarity: float = 0.9,
+    smoothness: float = 0.9,
+    variability: float = 0.05,
+    rep_count: int = 5,
+) -> SetMetrics:
+    """Build a set from high-level controls (used by the frontend dev panel).
+
+    ``variability`` is the fractional rep-to-rep spread and drives the derived
+    consistency score.
+    """
+    ref_duration = 2000.0
+    ref_rom = 120.0
+    ref_velocity = 210.0
+
+    reps: list[RepMetrics] = []
+    for i in range(rep_count):
+        offset = (i - (rep_count - 1) / 2) / max(rep_count - 1, 1)  # -0.5 .. +0.5
+        spread = offset * 2 * variability
+        duration = ref_duration * duration_ratio * (1 + spread)
+        rom = ref_rom * rom_ratio * (1 + spread)
+        velocity = ref_velocity / max(duration_ratio, 0.1) * (1 - spread)
+        reps.append(
+            RepMetrics(
+                exercise_id=exercise_id,
+                rep_number=i + 1,
+                duration_ms=duration,
+                reference_duration_ms=ref_duration,
+                rom_deg=rom,
+                reference_rom_deg=ref_rom,
+                peak_angular_velocity_dps=velocity,
+                reference_peak_velocity_dps=ref_velocity,
+                smoothness_score=max(0.0, min(1.0, smoothness)),
+                similarity_score=max(0.0, min(1.0, similarity - abs(spread))),
+                confidence=0.9,
+            )
+        )
+    return build_set_metrics(exercise_id, reps, scenario="custom", scenario_label="Custom")
+
+
 def list_scenario_summaries() -> list[dict[str, str]]:
     return [
         {"id": "perfect_set", "label": "Perfect Set", "description": "Consistent tempo and full range."},

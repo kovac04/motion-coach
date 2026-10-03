@@ -1,0 +1,107 @@
+# Architecture
+
+## The one-sentence version
+
+Deterministic code measures movement, a bounded decision model classifies it, a language
+model phrases one cue, and a TTS model speaks it — with a deterministic fallback at every
+paid boundary.
+
+## RAW IMU PIPELINE — NOT BUILT YET
+
+```
+MPU-6050 / IMU on wrist
+        ↓
+   STM32 / ESP32
+        ↓
+   transport (USB serial / BLE)
+        ↓
+   Python signal processing      <-- future work
+        ↓
+   RepMetrics / SetMetrics
+```
+
+None of the above exists in this repo. It plugs in later by producing the exact Pydantic
+models in `backend/app/models/metrics.py`. Nothing downstream changes.
+
+## CURRENT SYSTEM (this repo)
+
+```
+RepMetrics / SetMetrics          (synthetic now; real later)
+        ↓
+ Decision provider               DECISION_PROVIDER = mock | jev | fallback
+        ↓
+ MovementDecision                (our stable internal contract)
+        ↓
+ Language provider               LANGUAGE_PROVIDER = mock | gemini | fallback
+        ↓
+ CoachingResponse
+        ↓
+ Voice provider                  VOICE_PROVIDER = elevenlabs | browser | disabled
+        ↓
+ browser audio + React dashboard
+```
+
+## Why each layer exists
+
+- **Metrics (Layer A, deterministic).** Facts only — durations, ratios, range, smoothness,
+  similarity, consistency, drift. No LLM computes these. They are reproducible and testable.
+- **Decision (Layer B, Jev/mock/fallback).** Answers *bounded* questions: what is the
+  primary issue, how severe, what to prioritize, whether to speak, and overall quality.
+  It is a decision model, not a chat model. It never writes prose.
+- **Language (Layer C, Gemini/mock/fallback).** Turns the structured decision into ONE
+  concise, actionable cue. It may not invent metrics or diagnose.
+- **Voice (Layer D, ElevenLabs/browser).** Speaks only the final text.
+
+## Fail-soft design
+
+Every paid provider is wrapped so a failure degrades instead of crashing:
+
+| Boundary  | Real          | On failure                        |
+| --------- | ------------- | --------------------------------- |
+| Decision  | Jev           | deterministic rules engine        |
+| Language  | Gemini        | deterministic text templates      |
+| Voice     | ElevenLabs    | browser `speechSynthesis`         |
+
+Provider mode is environment-driven, so failures can be isolated one at a time.
+
+## Metric conventions
+
+Defined in `backend/app/models/metrics.py` and enforced by tests.
+
+- `duration_ratio = duration_ms / reference_duration_ms`
+  - `< 1` faster than reference, `> 1` slower, `1.0` matched
+- `rom_ratio = rom_deg / reference_rom_deg`
+- `peak_velocity_ratio = peak_angular_velocity_dps / reference_peak_velocity_dps`
+- `smoothness_score`, `similarity_score`, `consistency_score`, `confidence` → `0..1`
+- `duration_variability`, `rom_variability` → coefficient of variation (`stdev / mean`), `0..1`
+- `tempo_drift_pct`, `rom_drift_pct` → signed percent change from first to last rep
+
+Set-level aggregates are produced by `build_set_metrics()` from per-rep metrics.
+
+## Decision contract
+
+`MovementDecision` (`backend/app/models/decisions.py`) is intentionally independent of any
+provider's wire format. The Jev adapter must *translate* into it; the rest of the app never
+sees provider-specific payloads.
+
+- `PrimaryIssue`: GOOD, TOO_FAST, TOO_SLOW, INSUFFICIENT_ROM, EXCESSIVE_ROM, INCONSISTENT, UNSTABLE, OTHER
+- `CoachingPriority`: TEMPO, ROM, CONTROL, CONSISTENCY, NONE
+- `Severity`: NONE, MILD, MODERATE, MAJOR
+- `OverallQuality`: POOR, FAIR, GOOD, EXCELLENT
+
+## When coaching is spoken
+
+Every rep/set can be evaluated and displayed. Spoken coaching normally happens once at the
+**end of a set** (the demo's `Analyze Set` / `Run Full Demo`). The frontend has an
+**Auto speak** toggle. A future severe-issue path could speak mid-set; not enabled now.
+
+## Where persistence will plug in
+
+Not implemented. Sessions are in-memory in the browser only. A future store (e.g. Tiger Data
+/ Timescale) would persist raw IMU samples, reps, sets, and session analytics behind a small
+storage interface — no schema is committed yet on purpose.
+
+## Boundaries we deliberately did not cross
+
+No MPU6050 driver, no MCU firmware, no serial/BLE parsing, no raw-IMU feature extraction,
+no rep segmentation, no DTW, no reference-rep comparison, no sensor processing.

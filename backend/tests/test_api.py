@@ -53,6 +53,18 @@ def test_invalid_metrics_rejected():
     assert response.status_code == 422
 
 
+def test_custom_set_endpoint():
+    response = client.post(
+        "/api/demo/custom",
+        json={"exercise_id": "bicep_curl", "duration_ratio": 0.8, "rom_ratio": 1.0,
+              "similarity": 0.9, "smoothness": 0.9, "variability": 0.02, "rep_count": 4},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["rep_count"] == 4
+    assert body["metadata"]["scenario"] == "custom"
+
+
 def test_tts_without_elevenlabs_uses_browser_fallback():
     response = client.post("/api/tts", json={"text": "Slow down and control the tempo."})
     assert response.status_code == 502

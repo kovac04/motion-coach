@@ -1,0 +1,127 @@
+"""Language layer: turns a MovementDecision into ONE concise coaching cue.
+
+Modes (env ``LANGUAGE_PROVIDER``):
+    mock     — deterministic template, no credentials (default)
+    gemini   — real Google GenAI SDK with structured output
+    fallback — deterministic template
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import time
+
+from app.config import Settings
+from app.exercises import get_profile
+from app.models.coaching import CoachingResponse, Tone
+from app.models.decisions import MovementDecision, PrimaryIssue, Severity
+from app.models.metrics import RepMetrics, SetMetrics
+from app.services.fallbacks import coaching_template, summarize
+
+logger = logging.getLogger(__name__)
+
+_SYSTEM_INSTRUCTION = (
+    "You are a concise movement coach. You receive a structured decision and a few "
+    "objective metrics. Produce ONE short, actionable coaching instruction (ideally "
+    "8-18 words, never more than 25). Speak directly to the athlete. Do not invent "
+    "metrics, do not diagnose injuries, do not mention issues the decision did not "
+    "identify, and do not add motivational filler."
+)
+
+
+def _prompt(decision: MovementDecision, metrics: RepMetrics | SetMetrics, exercise_id: str) -> str:
+    profile = get_profile(exercise_id)
+    s = summarize(metrics)
+    return (
+        f"Exercise: {profile.display_name}\n"
+        f"Context: {profile.jev_context}\n"
+        f"Decision: primary_issue={decision.primary_issue.value}, "
+        f"priority={decision.coaching_priority.value}, severity={decision.severity.value}, "
+        f"overall_quality={decision.overall_quality.value}\n"
+        f"Evidence: {', '.join(decision.evidence) or 'none'}\n"
+        f"Observed: duration_ratio={s.duration_ratio}, rom_ratio={s.rom_ratio}, "
+        f"consistency={s.consistency_score}, similarity={s.similarity_score}\n"
+        "Write the athlete-facing coaching cue now."
+    )
+
+
+def _tone_for(decision: MovementDecision) -> Tone:
+    if decision.primary_issue is PrimaryIssue.GOOD:
+        return Tone.ENCOURAGING
+    if decision.severity in (Severity.MODERATE, Severity.MAJOR):
+        return Tone.CORRECTIVE
+    return Tone.NEUTRAL
+
+
+class LanguageService:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+        self.mode = settings.language_provider
+
+    async def generate(
+        self,
+        decision: MovementDecision,
+        metrics: RepMetrics | SetMetrics,
+        exercise_id: str,
+    ) -> CoachingResponse:
+        started = time.perf_counter()
+
+        if self.mode == "gemini" and self.settings.gemini_api_key:
+            try:
+                response = await asyncio.to_thread(
+                    self._generate_gemini, decision, metrics, exercise_id
+                )
+            except Exception as exc:  # noqa: BLE001 - fail soft by design
+                logger.warning("Gemini generation failed (%s); using template", exc)
+                response = self._template(decision, exercise_id, provider="fallback")
+        else:
+            response = self._template(
+                decision, exercise_id, provider="mock" if self.mode == "mock" else "fallback"
+            )
+
+        response.latency_ms = (time.perf_counter() - started) * 1000.0
+        return response
+
+    def _template(self, decision: MovementDecision, exercise_id: str, provider: str) -> CoachingResponse:
+        profile = get_profile(exercise_id)
+        text, label = coaching_template(decision, profile.display_name)
+        return CoachingResponse(
+            text=text,
+            short_label=label,
+            tone=_tone_for(decision),
+            provider=provider,
+        )
+
+    def _generate_gemini(
+        self, decision: MovementDecision, metrics: RepMetrics | SetMetrics, exercise_id: str
+    ) -> CoachingResponse:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=self.settings.gemini_api_key)
+        result = client.models.generate_content(
+            model=self.settings.gemini_model,
+            contents=_prompt(decision, metrics, exercise_id),
+            config=types.GenerateContentConfig(
+                system_instruction=_SYSTEM_INSTRUCTION,
+                response_mime_type="application/json",
+                response_schema=CoachingResponse,
+                temperature=0.4,
+                max_output_tokens=120,
+            ),
+        )
+        parsed = result.parsed
+        if parsed is None:
+            raise ValueError("Gemini returned no structured output")
+        return CoachingResponse(
+            text=parsed.text,
+            short_label=parsed.short_label,
+            tone=_tone_for(decision),
+            provider="gemini",
+            model_version=self.settings.gemini_model,
+        )
+
+
+def get_language_service(settings: Settings) -> LanguageService:
+    return LanguageService(settings)

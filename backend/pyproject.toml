@@ -1,0 +1,31 @@
+[project]
+name = "motion-coach-backend"
+version = "0.1.0"
+description = "StormHacks 2026 Motion Coach backend: metrics -> decision -> language -> voice"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "httpx>=0.27",
+    "python-dotenv>=1.0",
+    "google-genai>=0.8",
+    "elevenlabs>=1.9",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "httpx>=0.27",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.uv]
+package = false

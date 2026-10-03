@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DecisionProvider = Literal["mock", "jev", "fallback"]
@@ -27,12 +28,17 @@ class Settings(BaseSettings):
     language_provider: LanguageProvider = "mock"
     voice_provider: VoiceProvider = "browser"
 
+    # TypeSafe Jev. Accepts JEV_BASE_URL or the provider's JEV_API_BASE_URL name.
     jev_api_key: str = ""
-    jev_base_url: str = ""
-    jev_model: str = ""
+    jev_base_url: str = Field(
+        default="",
+        validation_alias=AliasChoices("JEV_BASE_URL", "JEV_API_BASE_URL"),
+    )
+    jev_model: str = "jev-latest"
+    jev_docs: str = ""
 
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-flash-lite-latest"
 
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""

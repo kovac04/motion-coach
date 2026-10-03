@@ -20,6 +20,21 @@
   under Python 3.12. Mock pipeline verified end-to-end with zero API credentials.
 - `7667bbb` — "Add interactive demo dashboard". Vite production build and oxlint pass;
   dev server proxy to the backend verified.
+- `f78eac7` — "Add provider fallbacks, docs, and smoke tests".
+- `e35ed3e` — "Add isolated offline pipeline smoke test".
+- Jev provider contract verified from the official TypeSafe docs
+  (https://docs.typesafe.ai) and the real adapter implemented
+  (`POST https://api.typesafe.ai/v1/systemone`, model `jev-latest`).
+  Recorded in `docs/JEV_PROVIDER.md`. Adapter parsing and fail-soft covered by
+  offline tests; no paid calls are made by `pytest`.
+- Real provider smoke tests run manually:
+  - Gemini: `gemini-flash-lite-latest`, structured output, ~1.2 s.
+  - ElevenLabs: `eleven_turbo_v2_5`, 56 KB MP3 returned.
+  - Jev: `jev-1.13.0` — TOO_FAST (severity MODERATE, confidence 0.99, 244 ms) and
+    GOOD (quality EXCELLENT, confidence 0.91, 169 ms).
+- Full synthetic pipeline verified through the running API with all three real
+  providers: set → Jev (TOO_FAST, 0.98, 170 ms) → Gemini cue (1.3 s) → ElevenLabs
+  `audio/mpeg` (91 KB). No raw sensor data was used.
 
 ## Notes
 

@@ -1,7 +1,7 @@
-"""Real Jev decision smoke test — gated until the provider contract is verified.
+"""Real TypeSafe Jev smoke test. Run intentionally: `make smoke-jev`.
 
-This script refuses to make a request until the contract has been confirmed in
-docs/JEV_PROVIDER.md. It will not guess an endpoint or schema.
+Sends one obvious TOO_FAST set and one GOOD set, verifies parsing into our
+MovementDecision, and prints latency/model. Never prints keys.
 """
 
 from __future__ import annotations
@@ -17,32 +17,37 @@ from app.demo import scenarios  # noqa: E402
 from app.services.jev import DecisionService  # noqa: E402
 
 
-def main() -> int:
+async def check(service: DecisionService, scenario_id: str) -> bool:
+    metrics = scenarios.build_scenario(scenario_id)
+    decision = await service.evaluate(metrics)
+    print(f"\n[{scenario_id}] decided by: {decision.provider}")
+    print(f"  primary_issue: {decision.primary_issue.value}")
+    print(f"  severity: {decision.severity.value}  priority: {decision.coaching_priority.value}")
+    print(f"  should_speak: {decision.should_speak}  quality: {decision.overall_quality.value}")
+    print(f"  confidence: {decision.confidence}")
+    print(f"  alternatives: {decision.alternatives}")
+    print(f"  model: {decision.model_version}  latency: {decision.latency_ms:.0f} ms")
+    if decision.provider != "jev":
+        print("  FAIL: fell back — check key/base URL/model/network.")
+        return False
+    return True
+
+
+async def run() -> int:
     settings = Settings(decision_provider="jev")
-    if not (settings.jev_api_key and settings.jev_base_url):
-        print("JEV_API_KEY / JEV_BASE_URL not set. See docs/JEV_PROVIDER.md.")
+    if not settings.jev_api_key or not settings.jev_base_url:
+        print("JEV_API_KEY / JEV_API_BASE_URL not set. See docs/JEV_PROVIDER.md.")
         return 2
 
-    print(f"provider: {settings.jev_base_url}  model: {settings.jev_model or '(unset)'}")
-    metrics = scenarios.build_scenario("too_fast")
-    decision = asyncio.run(DecisionService(settings).evaluate(metrics))
-
-    print(f"decided by: {decision.provider}")
-    print(f"primary_issue: {decision.primary_issue.value}")
-    print(f"severity: {decision.severity.value}")
-    print(f"confidence: {decision.confidence}")
-    print(f"evidence: {decision.evidence}")
-    print(f"latency: {decision.latency_ms} ms")
-
-    if decision.provider != "jev":
-        print(
-            "FAIL: provider did not return a Jev decision. The real adapter is not "
-            "implemented until the contract is verified (docs/JEV_PROVIDER.md)."
-        )
-        return 1
-    print("OK")
-    return 0
+    print(f"provider: {settings.jev_base_url}/v1/systemone  model: {settings.jev_model}")
+    service = DecisionService(settings)
+    results = [
+        await check(service, "too_fast"),
+        await check(service, "perfect_set"),
+    ]
+    print("\nOK" if all(results) else "\nFAILURES")
+    return 0 if all(results) else 1
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(asyncio.run(run()))

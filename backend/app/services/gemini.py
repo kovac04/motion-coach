@@ -12,6 +12,8 @@ import asyncio
 import logging
 import time
 
+from pydantic import BaseModel
+
 from app.config import Settings
 from app.exercises import get_profile
 from app.models.coaching import CoachingResponse, Tone
@@ -20,6 +22,14 @@ from app.models.metrics import RepMetrics, SetMetrics
 from app.services.fallbacks import coaching_template, summarize
 
 logger = logging.getLogger(__name__)
+
+
+class _GeminiCoaching(BaseModel):
+    """Minimal structured-output schema; tone/provider metadata is added by us."""
+
+    text: str
+    short_label: str
+
 
 _SYSTEM_INSTRUCTION = (
     "You are a concise movement coach. You receive a structured decision and a few "
@@ -100,20 +110,42 @@ class LanguageService:
         from google.genai import types
 
         client = genai.Client(api_key=self.settings.gemini_api_key)
-        result = client.models.generate_content(
-            model=self.settings.gemini_model,
-            contents=_prompt(decision, metrics, exercise_id),
-            config=types.GenerateContentConfig(
-                system_instruction=_SYSTEM_INSTRUCTION,
-                response_mime_type="application/json",
-                response_schema=CoachingResponse,
-                temperature=0.4,
-                max_output_tokens=120,
-            ),
-        )
-        parsed = result.parsed
+        prompt = _prompt(decision, metrics, exercise_id)
+
+        base_config: dict = {
+            "system_instruction": _SYSTEM_INSTRUCTION,
+            "response_mime_type": "application/json",
+            "response_schema": _GeminiCoaching,
+            "temperature": 0.4,
+            "max_output_tokens": 400,
+        }
+
+        # Some Gemini flash models "think" and exhaust the small output budget; some
+        # lite models reject a thinking config outright. Try thinking-disabled first,
+        # then fall back to a plain call. This keeps the model configurable.
+        configs: list[dict] = []
+        if hasattr(types, "ThinkingConfig"):
+            configs.append({**base_config, "thinking_config": types.ThinkingConfig(thinking_budget=0)})
+        configs.append(base_config)
+
+        parsed = None
+        last_error: Exception | None = None
+        for config_kwargs in configs:
+            try:
+                result = client.models.generate_content(
+                    model=self.settings.gemini_model,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(**config_kwargs),
+                )
+            except Exception as exc:  # noqa: BLE001 - try the next config shape
+                last_error = exc
+                continue
+            if result.parsed is not None:
+                parsed = result.parsed
+                break
+
         if parsed is None:
-            raise ValueError("Gemini returned no structured output")
+            raise ValueError(f"Gemini returned no structured output ({last_error})")
         return CoachingResponse(
             text=parsed.text,
             short_label=parsed.short_label,

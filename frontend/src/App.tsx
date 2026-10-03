@@ -69,7 +69,10 @@ export default function App() {
         }
         const evaluation = await api.evaluateSet(scoped)
         setResult(evaluation)
-        if (forceSpeak || autoSpeak) await speak(evaluation.coaching.text)
+        // The decision layer decides whether a spoken cue is warranted; "Run Full Demo" overrides.
+        if (forceSpeak || (autoSpeak && evaluation.decision.should_speak)) {
+          await speak(evaluation.coaching.text)
+        }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Evaluation failed')
       } finally {

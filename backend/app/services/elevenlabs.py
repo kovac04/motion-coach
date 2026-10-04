@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from dataclasses import dataclass
 
 from app.config import Settings
@@ -28,6 +29,7 @@ class AudioResult:
     audio: bytes | None = None
     content_type: str | None = None
     error: str | None = None
+    latency_ms: float | None = None
 
 
 class VoiceService:
@@ -40,12 +42,16 @@ class VoiceService:
             return AudioResult(provider=self.mode, error="voice provider not set to elevenlabs")
         if not (self.settings.elevenlabs_api_key and self.settings.elevenlabs_voice_id):
             return AudioResult(provider="browser", error="ElevenLabs not configured")
+        started = time.perf_counter()
         try:
             audio = await asyncio.to_thread(self._synthesize_elevenlabs, text)
-            return AudioResult(provider="elevenlabs", audio=audio, content_type=CONTENT_TYPE)
+            latency_ms = (time.perf_counter() - started) * 1000.0
+            return AudioResult(provider="elevenlabs", audio=audio, content_type=CONTENT_TYPE,
+                               latency_ms=latency_ms)
         except Exception as exc:  # noqa: BLE001 - fail soft to browser voice
             logger.warning("ElevenLabs synthesis failed (%s); frontend should use browser voice", exc)
-            return AudioResult(provider="browser", error=str(exc))
+            return AudioResult(provider="browser", error=str(exc),
+                               latency_ms=(time.perf_counter() - started) * 1000.0)
 
     def _synthesize_elevenlabs(self, text: str) -> bytes:
         from elevenlabs.client import ElevenLabs

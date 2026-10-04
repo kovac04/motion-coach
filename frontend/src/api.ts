@@ -1,4 +1,5 @@
 import type {
+  CoachingResult,
   EvaluationResult,
   ExerciseProfile,
   Health,
@@ -15,8 +16,18 @@ export interface CalibrationResult {
   reps_used?: number
   reference_duration_ms?: number
   reference_excursion_deg?: number
+  reference_peak_dps?: number
   noise_dps?: number
 }
+
+export interface MotionActionResult {
+  ok: boolean
+  error?: string
+  target_reps?: number
+  auto_finish?: boolean
+}
+
+export type MotionFinishResult = CoachingResult & { ok?: boolean; error?: string }
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -56,6 +67,10 @@ export const api = {
   evaluateSet: (metrics: SetMetrics) => postJson<EvaluationResult>('/api/evaluate/set', metrics),
   evaluateRep: (metrics: RepMetrics) => postJson<EvaluationResult>('/api/evaluate/rep', metrics),
   motionStatus: () => getJson<MotionStatus>('/api/motion/status'),
-  calibrateMotion: (exerciseId: string, seconds = 20) =>
-    postJson<CalibrationResult>('/api/motion/calibrate', { exercise_id: exerciseId, seconds }),
+  motionSetStart: () => postJson<MotionActionResult>('/api/motion/set/start', {}),
+  motionSetFinish: () => postJson<MotionFinishResult>('/api/motion/set/finish', {}),
+  motionCalibrateStart: () => postJson<MotionActionResult>('/api/motion/calibrate/start', {}),
+  motionCalibrateFinish: () => postJson<CalibrationResult>('/api/motion/calibrate/finish', {}),
+  motionSetAutoFinish: (enabled: boolean) =>
+    postJson<MotionActionResult>('/api/motion/auto-finish', { enabled }),
 }

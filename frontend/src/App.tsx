@@ -3,7 +3,7 @@ import { api, type CustomSetControls } from './api'
 import { CoachPanel } from './components/CoachPanel'
 import { DecisionPanel } from './components/DecisionPanel'
 import { DevPanel } from './components/DevPanel'
-import { LiveSensor } from './components/LiveSensor'
+import { LiveView } from './components/LiveView'
 import { RepHistory } from './components/RepHistory'
 import { ScenarioPanel } from './components/ScenarioPanel'
 import { SetSummary } from './components/SetSummary'
@@ -30,6 +30,7 @@ function providerChip(name: string, mode: string, configured: boolean) {
 }
 
 export default function App() {
+  const [tab, setTab] = useState<'live' | 'synthetic'>('live')
   const [health, setHealth] = useState<Health | null>(null)
   const [scenarios, setScenarios] = useState<ScenarioSummary[]>([])
   const [exercises, setExercises] = useState<ExerciseProfile[]>([])
@@ -51,7 +52,7 @@ export default function App() {
     async (text: string) => {
       setSpeaking(true)
       const used = await playCoaching(text, voiceMode)
-      setVoiceUsed(used)
+      setVoiceUsed(used.voice)
       setSpeaking(false)
     },
     [voiceMode],
@@ -70,7 +71,6 @@ export default function App() {
         }
         const evaluation = await api.evaluateSet(scoped)
         setResult(evaluation)
-        // The decision layer decides whether a spoken cue is warranted; "Run Full Demo" overrides.
         if (forceSpeak || (autoSpeak && evaluation.decision.should_speak)) {
           await speak(evaluation.coaching.text)
         }
@@ -83,20 +83,17 @@ export default function App() {
     [metrics, exerciseId, autoSpeak, speak],
   )
 
-  const loadScenario = useCallback(
-    async (id: string) => {
-      setSelectedScenario(id)
-      setError(null)
-      try {
-        const data = await api.scenario(id)
-        setMetrics(data)
-        setResult(null)
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Could not load scenario')
-      }
-    },
-    [],
-  )
+  const loadScenario = useCallback(async (id: string) => {
+    setSelectedScenario(id)
+    setError(null)
+    try {
+      const data = await api.scenario(id)
+      setMetrics(data)
+      setResult(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load scenario')
+    }
+  }, [])
 
   useEffect(() => {
     void (async () => {
@@ -149,86 +146,102 @@ export default function App() {
         </div>
       </header>
 
+      <nav className="tabs">
+        <button className={`tab ${tab === 'live' ? 'active' : ''}`} onClick={() => setTab('live')}>
+          LIVE WEARABLE
+        </button>
+        <button
+          className={`tab ${tab === 'synthetic' ? 'active' : ''}`}
+          onClick={() => setTab('synthetic')}
+        >
+          SYNTHETIC DEMO
+        </button>
+      </nav>
+
       {error && <div className="error-banner">{error}</div>}
 
-      <div className="grid">
-        <div className="stack">
-          <LiveSensor voiceMode={voiceMode} autoSpeak={autoSpeak} />
-
-          <div className="panel">
-            <h2>Exercise</h2>
-            <div className="field">
-              <select value={exerciseId} onChange={(e) => setExerciseId(e.target.value)}>
-                {exercises.map((ex) => (
-                  <option key={ex.id} value={ex.id}>
-                    {ex.display_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <ScenarioPanel
-            scenarios={scenarios}
-            selected={selectedScenario}
-            onSelect={(id) => void loadScenario(id)}
-          />
-
-          <DevPanel
-            open={devOpen}
-            onToggle={() => setDevOpen((v) => !v)}
-            controls={controls}
-            onChange={setControls}
-            onBuild={() => void handleBuildCustom()}
-            onEvaluate={() => void evaluate()}
-            busy={busy}
-          />
-        </div>
-
-        <div className="stack">
-          {metrics && <SetSummary metrics={metrics} />}
-
-          <div className="actions">
-            <button className="btn btn-primary" onClick={() => void evaluate()} disabled={busy || !metrics}>
-              {busy ? 'Analyzing…' : 'Analyze Set'}
-            </button>
-            <button
-              className="btn btn-ghost"
-              onClick={() => {
-                stopSpeaking()
-                void evaluate(true)
-              }}
-              disabled={busy || !metrics}
-            >
-              Run Full Demo
-            </button>
-          </div>
-
-          {result ? (
-            <>
-              <DecisionPanel decision={result.decision} />
-              <CoachPanel
-                coaching={result.coaching}
-                autoSpeak={autoSpeak}
-                onToggleAutoSpeak={() => setAutoSpeak((v) => !v)}
-                onSpeak={() => void speak(result.coaching.text)}
-                speaking={speaking}
-                voiceUsed={voiceUsed}
-                timings={result.timings_ms}
-              />
-            </>
-          ) : (
+      {tab === 'live' ? (
+        <LiveView voiceMode={voiceMode} onSyntheticTab={() => setTab('synthetic')} />
+      ) : (
+        <div className="grid">
+          <div className="stack">
             <div className="panel">
-              <h2>Decision</h2>
-              <p className="notice">
-                Select a scenario and press Analyze Set. Running in mock mode — no credentials needed.
+              <h2>Synthetic Demo</h2>
+              <p className="meta-line">
+                Mock metrics only — not connected to the wearable.
               </p>
             </div>
-          )}
 
-          {metrics && <RepHistory metrics={metrics} />}
+            <div className="panel">
+              <h2>Exercise</h2>
+              <div className="field">
+                <select value={exerciseId} onChange={(e) => setExerciseId(e.target.value)}>
+                  {exercises.map((ex) => (
+                    <option key={ex.id} value={ex.id}>{ex.display_name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <ScenarioPanel
+              scenarios={scenarios}
+              selected={selectedScenario}
+              onSelect={(id) => void loadScenario(id)}
+            />
+
+            <DevPanel
+              open={devOpen}
+              onToggle={() => setDevOpen((v) => !v)}
+              controls={controls}
+              onChange={setControls}
+              onBuild={() => void handleBuildCustom()}
+              onEvaluate={() => void evaluate()}
+              busy={busy}
+            />
+          </div>
+
+          <div className="stack">
+            {metrics && <SetSummary metrics={metrics} />}
+
+            <div className="actions">
+              <button className="btn btn-primary" onClick={() => void evaluate()} disabled={busy || !metrics}>
+                {busy ? 'Analyzing…' : 'Analyze Set'}
+              </button>
+              <button
+                className="btn btn-ghost"
+                onClick={() => { stopSpeaking(); void evaluate(true) }}
+                disabled={busy || !metrics}
+              >
+                Run Full Demo
+              </button>
+            </div>
+
+            {result ? (
+              <>
+                <DecisionPanel decision={result.decision} />
+                <CoachPanel
+                  coaching={result.coaching}
+                  autoSpeak={autoSpeak}
+                  onToggleAutoSpeak={() => setAutoSpeak((v) => !v)}
+                  onSpeak={() => void speak(result.coaching.text)}
+                  speaking={speaking}
+                  voiceUsed={voiceUsed}
+                  timings={result.timings_ms}
+                />
+              </>
+            ) : (
+              <div className="panel">
+                <h2>Decision</h2>
+                <p className="notice">
+                  Select a scenario and press Analyze Set. Running in mock/fallback mode.
+                </p>
+              </div>
+            )}
+
+            {metrics && <RepHistory metrics={metrics} />}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

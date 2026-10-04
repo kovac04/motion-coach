@@ -37,7 +37,8 @@ async def evaluate_set(
 async def tts(request: TTSRequest, settings: Settings = Depends(get_settings)):
     result = await get_voice_service(settings).synthesize(request.text)
     if result.audio:
-        return Response(content=result.audio, media_type=result.content_type)
+        headers = {"X-TTS-Ms": f"{result.latency_ms or 0:.0f}", "X-TTS-Provider": result.provider}
+        return Response(content=result.audio, media_type=result.content_type, headers=headers)
     # Fail soft: tell the frontend to use browser speechSynthesis.
     raise HTTPException(
         status_code=502,

@@ -136,13 +136,39 @@ export interface CoachingResult {
   timings_ms?: Record<string, number>
 }
 
+export interface MotionCalibration {
+  active: boolean
+  reps: number
+  target: number
+  result: {
+    ok: boolean
+    error?: string
+    reps_used?: number
+    reference_duration_ms?: number
+    reference_excursion_deg?: number
+    reference_peak_dps?: number
+    noise_dps?: number
+  } | null
+}
+
+export interface MotionLatency {
+  metrics?: number
+  jev?: number
+  gemini?: number
+}
+
 export interface MotionStatus {
-  state: string
+  mode: string // NO_PROFILE | CALIBRATING | READY | SET_ACTIVE | ANALYZING | COACHING
+  state: string // READY | ACTIVE
   rep_count: number
+  auto_finish: boolean
+  idle_timeout_s: number
   exercise_id: string
   has_profile: boolean
   available_profiles: string[]
+  calibration: MotionCalibration
   last_evaluation: CoachingResult | null
+  latency_ms: MotionLatency | null
 }
 
 export interface Health {

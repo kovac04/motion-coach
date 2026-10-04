@@ -89,22 +89,31 @@ WebSocket. Pushes ~10×/second:
 
 `samples` is the last ~2.5 s of the bounded ring buffer, ready to render directly.
 
-## GET /api/motion/status
+## Live motion control
 
-Live set-detection state. `state` is `WAITING` | `ACTIVE` | `COMPLETE` |
-`NO_PROFILE`, plus `rep_count`, `has_profile`, `available_profiles`, and the latest
-`last_evaluation` (decision + coaching, or a rejection reason).
+`GET /api/motion/status`
+: `mode` = `NO_PROFILE` | `CALIBRATING` | `READY` | `SET_ACTIVE` | `ANALYZING` | `COACHING`;
+also `rep_count`, `auto_finish`, `idle_timeout_s`, `has_profile`, `available_profiles`,
+`calibration` (`{active, reps, target, result}`), `last_evaluation`, and `latency_ms`
+(`{metrics, jev, gemini}`).
 
-## POST /api/motion/calibrate
+`POST /api/motion/calibrate/start`
+: Starts capturing the live stream. Detects reps as they happen and **auto-finishes at
+  5 valid reps**, building and saving the profile. Returns `{ ok, target_reps }`.
 
-```json
-{ "exercise_id": "bicep_curl", "seconds": 20 }
-```
+`POST /api/motion/calibrate/finish`
+: Manual fallback finish. Returns the calibration result.
 
-Captures the live BLE stream for `seconds`, builds a calibration profile from the
-reps performed, saves `data/profiles/bicep_curl.json`, and reloads the detector.
-Returns `{ ok, reps_used, reference_duration_ms, reference_excursion_deg, noise_dps }`
-or `{ ok: false, error }`.
+`POST /api/motion/set/start`
+: Clears the set buffer and enters `SET_ACTIVE`. Movement before this is never part of a set.
+
+`POST /api/motion/set/finish`
+: Finalizes immediately, builds `SetMetrics`, and runs the pipeline once. Returns
+  `{ ok, rejected?, reason?, source:"live", rep_count, metrics, decision, coaching, timings_ms }`
+  or `{ ok:false, error }` if no set is active.
+
+`POST /api/motion/auto-finish`
+: `{ "enabled": true }` toggles the 3 s idle auto-finish backup.
 
 ## WS /api/sensor/stream (motion field)
 

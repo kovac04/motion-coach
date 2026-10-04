@@ -10,7 +10,7 @@ AXIS = np.array([0.0, 0.0, 1.0])
 
 def _synthetic_rows(reps: int = 5):
     dt = 0.02
-    t = np.arange(0, 14, dt)
+    t = np.arange(0, 15.5, dt)  # long idle tail so auto-finish can fire
     v = np.zeros_like(t)
     for k in range(reps):
         s = 100 + k * 110
@@ -41,7 +41,8 @@ def _profile():
 
 def test_live_detector_completes_a_set():
     profile = _profile()
-    detector = LiveSetDetector(profile, idle_timeout_s=1.0, pre_roll_s=1.0, min_reps=2)
+    detector = LiveSetDetector(profile, idle_timeout_s=1.0, min_reps=2)
+    detector.start_set()
     t, g, _ = _synthetic_rows()
     completed = None
     for i in range(len(t)):
@@ -54,13 +55,26 @@ def test_live_detector_completes_a_set():
     assert completed.rep_count >= 4
     assert completed.metrics.exercise_id == "bicep_curl"
     assert completed.metrics.reps
-    # Detector returns to waiting for the next set.
-    assert detector.status()["state"] == "WAITING"
+    assert detector.status()["state"] == "READY"
+
+
+def test_live_detector_manual_finish():
+    profile = _profile()
+    detector = LiveSetDetector(profile, min_reps=2)
+    detector.start_set()
+    t, g, _ = _synthetic_rows()
+    for i in range(len(t)):
+        detector.update(_sample(i, t, g))
+    completed = detector.finish_set()
+    assert completed is not None
+    assert completed.rep_count >= 4
+    assert detector.status()["state"] == "READY"
 
 
 def test_live_detector_rejects_single_rep():
     profile = _profile()
     detector = LiveSetDetector(profile, idle_timeout_s=1.0, min_reps=2)
+    detector.start_set()
     t, g, _ = _synthetic_rows(reps=1)
     completed = None
     for i in range(len(t)):
@@ -68,6 +82,7 @@ def test_live_detector_rejects_single_rep():
         if result is not None:
             completed = result
             break
+    completed = completed or detector.finish_set()
     assert completed is not None
     assert completed.rejected is True
     assert "insufficient" in completed.reason

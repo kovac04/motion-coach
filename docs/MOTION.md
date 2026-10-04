@@ -86,22 +86,29 @@ velocity, similarity) and writes a debug plot
 (`data/recordings/<name>-segments.png`) showing the projected signal, thresholds,
 and rep boundaries, so boundaries can be verified visually.
 
-## Live pipeline
+## Live pipeline (explicit control for the demo)
 
 `LiveMotionService` subscribes to the single `SensorRuntime` BLE owner (no second
-connection). `LiveSetDetector` keeps a ~1 s pre-roll so rep 1 is preserved, runs
-the same segmentation on the live buffer, and declares the set complete after a
-configurable idle timeout (default 3 s). It then returns to WAITING.
+connection). The set lifecycle is explicit and driven by the UI:
 
-On a completed set the existing `CoachPipeline` runs unchanged:
-`SetMetrics -> Jev/mock -> MovementDecision -> Gemini/mock -> CoachingResponse`.
-Sets with too few valid reps are rejected (`SET_REJECTED`) instead of sending
-garbage to Jev. State and coaching are pushed over the existing WebSocket; the
-dashboard shows the state, rep count, decision, and speaks the cue.
+```
+NO_PROFILE -> CALIBRATING -> READY -> SET_ACTIVE -> ANALYZING -> COACHING -> READY
+```
 
-Calibration in the UI (`POST /api/motion/calibrate`) captures ~20 s of live
-samples, builds the profile from the reps performed, and saves it — so the live
-PCA axis/bias match the current mounting.
+- **Calibration** (`start`/`finish`): the UI shows a 3-2-1 countdown, then captures;
+  the backend detects reps as they happen and **auto-finishes at 5 valid reps**,
+  builds and saves the profile. No blind fixed-duration capture, no pre-countdown data.
+- **Start Set** clears the buffer; movement before it is never part of a set.
+- **Finish Set** finalizes immediately. A configurable idle auto-finish (~3 s) is an
+  optional backup; manual finish overrides it.
+- Exactly **one** coaching event per completed set; a new set stops any in-flight audio.
+  Sets with too few valid reps return `SET_REJECTED` instead of reaching Jev.
+- Latency is measured and surfaced: metrics / Jev / Gemini (backend) and ElevenLabs
+  (via the `X-TTS-Ms` response header) plus total-to-audio (browser).
+
+The browser dashboard has two separated tabs — **LIVE WEARABLE** (primary) and
+**SYNTHETIC DEMO** — so synthetic scenarios can never be mistaken for a live set.
+Live results populate the main Set/Decision/Coach panels with `source=live` logged.
 
 ## Honest limitations
 

@@ -385,6 +385,91 @@ input[type='range'] {
   left: 20px;
 }
 
+/* Tabs */
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.tab {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  font-size: 12px;
+}
+.tab.active {
+  background: var(--accent);
+  color: #04241a;
+  border-color: var(--accent);
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  text-decoration: underline;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* Live state */
+.live-state {
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  margin: 10px 0 4px;
+}
+.live-state.state-SET_ACTIVE {
+  color: var(--accent);
+}
+.live-state.state-ANALYZING {
+  color: var(--warn);
+}
+.live-state.state-CALIBRATING {
+  color: var(--warn);
+}
+.live-state.state-COACHING {
+  color: var(--good);
+}
+.live-state.state-NO_PROFILE {
+  color: var(--muted);
+}
+.steps {
+  margin: 14px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.steps li {
+  margin: 4px 0;
+}
+.steps li.done {
+  color: var(--good);
+}
+.steps li.active {
+  color: var(--text);
+  font-weight: 700;
+}
+.countdown {
+  font-size: 72px;
+  font-weight: 800;
+  text-align: center;
+  color: var(--accent);
+  font-family: var(--mono);
+  margin: 10px 0;
+}
+.banner-complete {
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: var(--accent);
+}
+.motion-coaching .coach-text.small {
+  font-size: 18px;
+}
+
 /* Live sensor */
 .live-status {
   display: flex;

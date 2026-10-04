@@ -72,6 +72,14 @@ class Settings(BaseSettings):
     live_jev_timeout_s: float = 2.0
     live_gemini_timeout_s: float = 2.0
 
+    # Deterministic deviation bands (engineering tolerances, not biomechanical truth).
+    band_tempo_fast: float = 0.85
+    band_tempo_slow: float = 1.15
+    band_rom_low: float = 0.90
+    band_rom_high: float = 1.15
+    band_consistency_low: float = 0.85
+    min_affected_fraction: float = 0.5
+
     def provider_status(self) -> dict[str, dict[str, object]]:
         """Safe, non-secret summary for /health and /api/providers."""
         return {

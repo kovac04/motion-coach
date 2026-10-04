@@ -21,13 +21,7 @@ from app.models.decisions import (
     Severity,
 )
 from app.models.metrics import RepMetrics, SetMetrics
-
-# Centralized thresholds — tune here, nowhere else.
-DURATION_RATIO_FAST = 0.85
-DURATION_RATIO_SLOW = 1.15
-ROM_RATIO_LOW = 0.90
-ROM_RATIO_HIGH = 1.15
-CONSISTENCY_LOW = 0.85
+from app.motion.assessment import deterministic_decision
 
 
 @dataclass
@@ -68,75 +62,11 @@ def summarize(metrics: RepMetrics | SetMetrics) -> _Summary:
     )
 
 
-def _severity_from_magnitude(magnitude: float) -> Severity:
-    if magnitude < 0.10:
-        return Severity.MILD
-    if magnitude < 0.25:
-        return Severity.MODERATE
-    return Severity.MAJOR
-
-
-def _quality_from_severity(severity: Severity) -> OverallQuality:
-    return {
-        Severity.NONE: OverallQuality.EXCELLENT,
-        Severity.MILD: OverallQuality.GOOD,
-        Severity.MODERATE: OverallQuality.FAIR,
-        Severity.MAJOR: OverallQuality.POOR,
-    }[severity]
-
-
 def evaluate_decision(metrics: RepMetrics | SetMetrics) -> MovementDecision:
-    """Rules-based classification of a rep or set into our internal contract."""
-    s = summarize(metrics)
-    evidence: list[str] = []
+    """Rules-based fallback, delegated to the deterministic deviation assessment."""
+    from app.motion.assessment import assess
 
-    issue = PrimaryIssue.GOOD
-    severity = Severity.NONE
-    priority = CoachingPriority.NONE
-
-    if s.duration_ratio is not None and s.duration_ratio < DURATION_RATIO_FAST:
-        issue = PrimaryIssue.TOO_FAST
-        priority = CoachingPriority.TEMPO
-        severity = _severity_from_magnitude(1.0 - s.duration_ratio)
-        evidence.append(f"duration_ratio={s.duration_ratio:.2f} (faster than reference)")
-    elif s.duration_ratio is not None and s.duration_ratio > DURATION_RATIO_SLOW:
-        issue = PrimaryIssue.TOO_SLOW
-        priority = CoachingPriority.TEMPO
-        severity = _severity_from_magnitude(s.duration_ratio - 1.0)
-        evidence.append(f"duration_ratio={s.duration_ratio:.2f} (slower than reference)")
-    elif s.rom_ratio is not None and s.rom_ratio < ROM_RATIO_LOW:
-        issue = PrimaryIssue.INSUFFICIENT_ROM
-        priority = CoachingPriority.ROM
-        severity = _severity_from_magnitude(1.0 - s.rom_ratio)
-        evidence.append(f"rom_ratio={s.rom_ratio:.2f} (below reference range)")
-    elif s.rom_ratio is not None and s.rom_ratio > ROM_RATIO_HIGH:
-        issue = PrimaryIssue.EXCESSIVE_ROM
-        priority = CoachingPriority.ROM
-        severity = _severity_from_magnitude(s.rom_ratio - 1.0)
-        evidence.append(f"rom_ratio={s.rom_ratio:.2f} (above reference range)")
-    elif s.consistency_score is not None and s.consistency_score < CONSISTENCY_LOW:
-        issue = PrimaryIssue.INCONSISTENT
-        priority = CoachingPriority.CONSISTENCY
-        severity = _severity_from_magnitude(1.0 - s.consistency_score)
-        evidence.append(f"consistency_score={s.consistency_score:.2f} (variable reps)")
-
-    if issue is PrimaryIssue.GOOD:
-        evidence.append("tempo and range within expected bounds")
-
-    if s.tempo_drift_pct is not None and abs(s.tempo_drift_pct) >= 10:
-        evidence.append(f"tempo_drift={s.tempo_drift_pct:+.0f}% across set")
-
-    confidence = 0.55 + 0.05 * len(evidence)
-    return MovementDecision(
-        primary_issue=issue,
-        coaching_priority=priority,
-        severity=severity,
-        should_speak=severity is not Severity.NONE,
-        overall_quality=_quality_from_severity(severity),
-        confidence=min(confidence, 0.95),
-        evidence=evidence,
-        provider="fallback",
-    )
+    return deterministic_decision(assess(metrics), provider="fallback")
 
 
 # --- Language templates -----------------------------------------------------

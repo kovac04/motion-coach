@@ -140,6 +140,24 @@ deliberately excluded (translation with little orientation change makes gyro exc
 untrustworthy). This proves "exercise-specific calibration lets one generic pipeline adapt",
 not "any exercise works".
 
+## Decision layer: deterministic candidates, bounded Jev
+
+Deterministic code (`app/motion/assessment.py`) decides WHICH deviations exist,
+using **median** (robust) per-rep ratios and a **majority rule** (a single odd rep
+cannot classify a set) with centralized bands:
+tempo `0.85–1.15`, ROM `0.90–1.15`, consistency `>= 0.85`. It produces
+`candidate_issues`. Similarity is evidence only and never creates a candidate.
+
+Jev then only chooses WHICH valid deviation to coach:
+- no candidates → deterministic GOOD, `should_speak=false`, **Jev is not called**;
+- one candidate → primary issue fixed, Jev is asked only for severity;
+- multiple candidates → Jev chooses among the supplied candidates only and can never
+  return an issue the facts did not establish.
+
+`rom_ratio` is *movement excursion relative to the personal reference*, not true joint
+ROM. Fast reps overshoot the integrated excursion, so an elevated `rom_ratio` during a
+clearly-fast set is not emitted as `EXCESSIVE_ROM`.
+
 ## When coaching is spoken
 
 The decision's `should_speak` is the single source of truth. A GOOD set with no meaningful

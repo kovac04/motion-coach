@@ -31,6 +31,14 @@ from app.models.decisions import (
     Severity,
 )
 from app.models.metrics import RepMetrics, SetMetrics
+from app.motion.assessment import (
+    Bands,
+    DeviationAssessment,
+    PRIORITY_FOR_ISSUE,
+    assess,
+    deterministic_decision,
+    quality_from_severity,
+)
 from app.services.fallbacks import evaluate_decision, summarize
 
 logger = logging.getLogger(__name__)
@@ -198,7 +206,8 @@ def _round(value: float | None, digits: int = 3) -> float | None:
     return None if value is None else round(value, digits)
 
 
-def _compact_state(metrics: RepMetrics | SetMetrics, exercise_id: str) -> dict:
+def _compact_state(metrics: RepMetrics | SetMetrics, exercise_id: str,
+                   assessment: DeviationAssessment | None = None) -> dict:
     """Build the Jev `state`. Never raw sensor arrays — only derived facts."""
     profile = get_profile(exercise_id)
     s = summarize(metrics)
@@ -254,6 +263,11 @@ def _compact_state(metrics: RepMetrics | SetMetrics, exercise_id: str) -> dict:
         if isinstance(section, dict):
             for key in [k for k, v in section.items() if v is None]:
                 del section[key]
+
+    if assessment is not None:
+        # Deterministic facts first; Jev may only choose among these candidates.
+        state["detected_deviations"] = assessment.to_dict()
+        state["candidate_issues"] = [c.value for c in assessment.candidates]
     return state
 
 
@@ -278,42 +292,77 @@ def _evidence(metrics: RepMetrics | SetMetrics) -> list[str]:
     return evidence
 
 
-def parse_jev_response(data: dict, metrics: RepMetrics | SetMetrics, model: str) -> MovementDecision:
-    """Translate a verified Jev response into our internal MovementDecision."""
+def _build_questions(assessment: DeviationAssessment) -> dict:
+    """Ask Jev only what the deterministic layer leaves open.
+
+    * 1 candidate  -> Jev is asked only for severity (primary issue is fixed).
+    * >1 candidate -> Jev chooses the priority among the detected candidates only.
+    """
+    questions: dict[str, dict] = {"severity": JEV_QUESTIONS["severity"]}
+    if len(assessment.candidates) > 1:
+        criteria = {
+            candidate.value.lower(): _ISSUE_CRITERIA[candidate.value.lower()]
+            for candidate in assessment.candidates
+        }
+        questions["primary_issue"] = {
+            "type": "choice",
+            "instructions": (
+                "Of the objectively detected deviations listed in the state, which one "
+                "deserves the coaching priority?"
+            ),
+            "criteria": criteria,
+        }
+    return questions
+
+
+def parse_jev_response(data: dict, metrics: RepMetrics | SetMetrics, model: str,
+                       assessment: DeviationAssessment | None = None,
+                       asked_primary: bool = True) -> MovementDecision:
+    """Translate a verified Jev response, constrained to the deterministic candidates."""
     try:
         answers = data["answers"]
-        issue_answer = answers["primary_issue"]
         severity_answer = answers["severity"]
-        priority_answer = answers["coaching_priority"]
-        speak_answer = answers["should_speak"]
-        quality_answer = answers["overall_quality"]
     except (KeyError, TypeError) as exc:
         raise JevError(f"malformed Jev response: missing {exc}") from exc
 
-    issue_key = str(issue_answer.get("choice", "")).lower()
-    priority_key = str(priority_answer.get("choice", "")).lower()
-
     try:
         severity = Severity(_ISSUE_LEVELS[round(float(severity_answer["score"]))].upper())
-        quality = OverallQuality(_QUALITY_LEVELS[round(float(quality_answer["score"]))].upper())
     except (KeyError, ValueError, IndexError) as exc:
         raise JevError(f"malformed Jev score in response: {exc}") from exc
 
-    alternatives = {
-        str(name).upper(): float(prob)
-        for name, prob in (issue_answer.get("probabilities") or {}).items()
-    }
+    candidates = assessment.candidates if assessment else []
+    alternatives: dict[str, float] = {}
+    confidence: float | None = None
+
+    if asked_primary and "primary_issue" in answers:
+        issue_answer = answers["primary_issue"]
+        key = str(issue_answer.get("choice", "")).upper()
+        chosen: PrimaryIssue | None = None
+        try:
+            chosen = PrimaryIssue(key)
+        except ValueError:
+            chosen = None
+        # Jev must never win with an issue we did not establish.
+        if chosen not in candidates:
+            chosen = max(candidates, key=assessment.magnitude) if candidates else PrimaryIssue.OTHER
+        confidence = issue_answer.get("confidence")
+        alternatives = {
+            str(name).upper(): float(prob)
+            for name, prob in (issue_answer.get("probabilities") or {}).items()
+        }
+    else:
+        # Single candidate (or no primary_issue question): decision is fixed.
+        chosen = candidates[0] if candidates else PrimaryIssue.GOOD
+        confidence = severity_answer.get("confidence")
 
     return MovementDecision(
-        primary_issue=PrimaryIssue(issue_key.upper()) if issue_key else PrimaryIssue.OTHER,
-        coaching_priority=(
-            CoachingPriority(priority_key.upper()) if priority_key else CoachingPriority.NONE
-        ),
+        primary_issue=chosen,
+        coaching_priority=PRIORITY_FOR_ISSUE.get(chosen, CoachingPriority.NONE),
         severity=severity,
-        should_speak=float(speak_answer.get("noul", 0.0)) >= 0.5,
-        overall_quality=quality,
-        confidence=issue_answer.get("confidence"),
-        evidence=_evidence(metrics),
+        should_speak=bool(candidates),
+        overall_quality=quality_from_severity(severity),
+        confidence=confidence,
+        evidence=assessment.evidence() if assessment else _evidence(metrics),
         alternatives=alternatives,
         provider="jev",
         model_version=data.get("model") or model,
@@ -325,25 +374,62 @@ class DecisionService:
         self.settings = settings
         self.mode = settings.decision_provider
 
+    def _bands(self) -> Bands:
+        return Bands(
+            tempo_fast=self.settings.band_tempo_fast,
+            tempo_slow=self.settings.band_tempo_slow,
+            rom_low=self.settings.band_rom_low,
+            rom_high=self.settings.band_rom_high,
+            consistency_low=self.settings.band_consistency_low,
+            min_affected_fraction=self.settings.min_affected_fraction,
+        )
+
+    @staticmethod
+    def _log_assessment(assessment: DeviationAssessment) -> None:
+        ratio = lambda v: "None" if v is None else f"{v:.2f}"
+        logger.info(
+            "DEVIATION ASSESSMENT: reps=%d | median_duration_ratio=%s tempo=%s affected=%d/%d | "
+            "median_rom_ratio=%s rom=%s affected=%d/%d | consistency=%s | similarity=%s | candidates=%s",
+            assessment.rep_count, ratio(assessment.median_duration_ratio), assessment.tempo_state,
+            assessment.tempo_affected, assessment.rep_count, ratio(assessment.median_rom_ratio),
+            assessment.rom_state, assessment.rom_affected, assessment.rep_count,
+            assessment.consistency_state, assessment.similarity_state,
+            [c.value for c in assessment.candidates],
+        )
+
+    @staticmethod
+    def _log_decision(decision: MovementDecision, assessment: DeviationAssessment) -> None:
+        logger.info("FINAL DECISION: primary_issue=%s should_speak=%s provider=%s candidates=%s",
+                    decision.primary_issue.value, decision.should_speak, decision.provider,
+                    [c.value for c in assessment.candidates])
+
     async def evaluate(self, metrics: RepMetrics | SetMetrics) -> MovementDecision:
         started = time.perf_counter()
+        assessment = assess(metrics, self._bands())
+        self._log_assessment(assessment)
 
-        if self.mode == "jev":
+        if self.mode == "mock":
+            decision = mock_decision(metrics)
+        elif not assessment.candidates:
+            # Clearly normal set: deterministic GOOD, Jev is never consulted.
+            decision = deterministic_decision(assessment, provider="deterministic")
+        elif self.mode == "fallback":
+            decision = deterministic_decision(assessment, provider="fallback")
+        elif self.mode == "jev":
             try:
-                decision = await self._evaluate_jev(metrics)
+                decision = await self._evaluate_jev(metrics, assessment)
             except Exception as exc:  # noqa: BLE001 - fail soft by design
                 logger.warning("Jev decision failed (%s); using fallback evaluator", exc)
-                decision = evaluate_decision(metrics)
-                decision = decision.model_copy(update={"provider": "fallback"})
-        elif self.mode == "fallback":
-            decision = evaluate_decision(metrics)
+                decision = deterministic_decision(assessment, provider="fallback")
         else:
-            decision = mock_decision(metrics)
+            decision = deterministic_decision(assessment, provider="fallback")
 
         decision.latency_ms = (time.perf_counter() - started) * 1000.0
+        self._log_decision(decision, assessment)
         return decision
 
-    async def _evaluate_jev(self, metrics: RepMetrics | SetMetrics) -> MovementDecision:
+    async def _evaluate_jev(self, metrics: RepMetrics | SetMetrics,
+                            assessment: DeviationAssessment) -> MovementDecision:
         """Call the verified TypeSafe Jev endpoint and translate the answer."""
         if not self.settings.jev_api_key:
             raise JevError("JEV_API_KEY is not set")
@@ -351,10 +437,12 @@ class DecisionService:
             raise JevError("JEV_API_BASE_URL / JEV_BASE_URL is not set")
 
         model = self.settings.jev_model or JEV_DEFAULT_MODEL
+        questions = _build_questions(assessment)
+        asked_primary = "primary_issue" in questions
         payload = {
-            "state": _compact_state(metrics, metrics.exercise_id),
+            "state": _compact_state(metrics, metrics.exercise_id, assessment),
             "model": model,
-            "questions": JEV_QUESTIONS,
+            "questions": questions,
         }
         headers = {
             "Authorization": f"Bearer {self.settings.jev_api_key}",
@@ -367,7 +455,7 @@ class DecisionService:
         )
 
         data = await self._post_with_retry(url, payload, headers, timeout)
-        return parse_jev_response(data, metrics, model)
+        return parse_jev_response(data, metrics, model, assessment, asked_primary)
 
     async def _post_with_retry(
         self, url: str, payload: dict, headers: dict, timeout: httpx.Timeout

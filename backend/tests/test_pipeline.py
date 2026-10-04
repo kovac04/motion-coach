@@ -2,8 +2,17 @@ import pytest
 
 from app.config import Settings
 from app.demo import scenarios
-from app.models.metrics import RepMetrics
+from app.models.metrics import RepMetrics, build_set_metrics
 from app.services.coach_pipeline import CoachPipeline
+
+
+def _fast_set():
+    reps = [
+        RepMetrics(exercise_id="bicep_curl", rep_number=i, duration_ms=1400,
+                   reference_duration_ms=2000, rom_deg=120, reference_rom_deg=120)
+        for i in range(1, 6)
+    ]
+    return build_set_metrics("bicep_curl", reps)
 
 
 @pytest.mark.asyncio
@@ -20,9 +29,9 @@ async def test_mock_pipeline_end_to_end():
 @pytest.mark.asyncio
 async def test_fallback_decision_provider():
     settings = Settings(decision_provider="fallback", language_provider="fallback")
-    metrics = scenarios.build_scenario("too_fast")
-    result = await CoachPipeline(settings).evaluate(metrics)
+    result = await CoachPipeline(settings).evaluate(_fast_set())
     assert result.decision.provider == "fallback"
+    assert result.decision.primary_issue.value == "TOO_FAST"
     assert result.coaching.provider == "fallback"
 
 

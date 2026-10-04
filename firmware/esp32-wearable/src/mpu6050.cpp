@@ -17,11 +17,11 @@ bool Mpu6050::begin(uint8_t address, int sda_pin, int scl_pin, uint32_t clock_hz
   }
   delay(50);
 
-  // Deterministic ranges. Defaults are already +-2g / +-250 dps, but set them
-  // explicitly so scaling assumptions downstream never change under us.
+  // Deterministic ranges chosen to avoid clipping during ordinary arm movement.
+  // Keep these in sync with backend/app/sensors/packet.py.
   writeRegister(MPU6050_REG_CONFIG, 0x03);        // DLPF ~44 Hz, 1 kHz gyro rate
-  writeRegister(MPU6050_REG_GYRO_CONFIG, 0x00);   // +-250 deg/s -> 131 LSB/dps
-  writeRegister(MPU6050_REG_ACCEL_CONFIG, 0x00);  // +-2g -> 16384 LSB/g
+  writeRegister(MPU6050_REG_GYRO_CONFIG, 0x10);   // FS_SEL=2 -> +-1000 dps, 32.8 LSB/dps
+  writeRegister(MPU6050_REG_ACCEL_CONFIG, 0x08);  // AFS_SEL=1 -> +-4g, 8192 LSB/g
   delay(10);
 
   // Confirm the device is actually on the bus.

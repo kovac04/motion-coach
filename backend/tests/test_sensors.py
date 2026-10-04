@@ -5,6 +5,8 @@ import struct
 import pytest
 
 from app.sensors.packet import (
+    ACCEL_LSB_PER_G,
+    GYRO_LSB_PER_DPS,
     PACKET_FORMAT,
     PACKET_SIZE,
     ImuSample,
@@ -49,9 +51,9 @@ def test_signed_extremes_roundtrip():
 def test_scaling_helpers():
     sample = ImuSample(1, 0, 16384, 0, 0, 131, 0, 0)
     x_g, _, _ = sample.accel_g()
-    assert x_g == pytest.approx(1.0)
+    assert x_g == pytest.approx(16384 / ACCEL_LSB_PER_G)
     gx_dps, _, _ = sample.gyro_dps()
-    assert gx_dps == pytest.approx(1.0)
+    assert gx_dps == pytest.approx(131 / GYRO_LSB_PER_DPS)
     assert sample.accel_magnitude == pytest.approx(16384.0)
     assert sample.gyro_magnitude == pytest.approx(131.0)
 

@@ -122,10 +122,12 @@ PY
    The firmware discovers the address (0x68 or 0x69; AD0 may be unconnected) and
    accepts MPU6050 (0x68) or MPU6500/9250/9255-class `WHO_AM_I` values (0x70/0x71/0x73),
    which share the same register map and 0x3B burst.
-3. **Stationary:** one accelerometer axis near ±16000 (~1 g = 16384 LSB) depending on
-   orientation; gyro near zero.
-4. **Move the sensor:** the raw values swing; fast shaking saturates the ±250 dps gyro
-   range (±32767), which is expected. Controlled reps will be far below saturation.
+3. **Stationary:** one accelerometer axis near ±8000 (~1 g = 8192 LSB at ±4 g) depending
+   on orientation; gyro near zero.
+4. **Move the sensor:** the raw values swing. Ranges are ±4 g and ±1000 dps, chosen so
+   ordinary arm movement does not clip (the original ±2 g / ±250 dps saturated during
+   fast motion). Keep these in sync with `backend/app/sensors/packet.py`
+   (`ACCEL_LSB_PER_G = 8192`, `GYRO_LSB_PER_DPS = 32.8`).
 5. If no device is found, the firmware automatically retries 100 kHz and swapped pins
    and prints a line-level/drive/short diagnostic before halting.
 

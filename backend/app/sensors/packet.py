@@ -25,9 +25,10 @@ assert PACKET_SIZE == 18, f"unexpected packet size {PACKET_SIZE}"
 
 SEQUENCE_WRAP = 1 << 16
 
-# Default MPU6050 full-scale sensitivity (matches firmware config).
-ACCEL_LSB_PER_G = 16384.0  # +-2 g
-GYRO_LSB_PER_DPS = 131.0   # +-250 deg/s
+# Full-scale sensitivity; must match the firmware configuration
+# (ACCEL_CONFIG=0x08 -> +-4 g, GYRO_CONFIG=0x10 -> +-1000 deg/s).
+ACCEL_LSB_PER_G = 8192.0   # +-4 g
+GYRO_LSB_PER_DPS = 32.8    # +-1000 deg/s
 
 
 @dataclass(frozen=True)

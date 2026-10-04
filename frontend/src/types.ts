@@ -129,17 +129,21 @@ export type SensorPoint = [number, number, number]
 export interface CoachingResult {
   rejected: boolean
   reason?: string
+  source?: string
   rep_count?: number
   metrics?: unknown
   decision?: MovementDecision
   coaching?: CoachingResponse
   timings_ms?: Record<string, number>
+  providers?: { decision: string; language: string }
 }
 
 export interface MotionCalibration {
   active: boolean
+  phase: string // IDLE | WAITING_STILL | REPS
   reps: number
   target: number
+  baseline_noise_dps: number | null
   result: {
     ok: boolean
     error?: string

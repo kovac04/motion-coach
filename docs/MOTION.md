@@ -95,9 +95,17 @@ connection). The set lifecycle is explicit and driven by the UI:
 NO_PROFILE -> CALIBRATING -> READY -> SET_ACTIVE -> ANALYZING -> COACHING -> READY
 ```
 
-- **Calibration** (`start`/`finish`): the UI shows a 3-2-1 countdown, then captures;
-  the backend detects reps as they happen and **auto-finishes at 5 valid reps**,
-  builds and saves the profile. No blind fixed-duration capture, no pre-countdown data.
+- **Calibration phases** (`start`/`finish`): 3-2-1 countdown → **HOLD STILL** (the
+  backend requires ~0.75 s of genuinely quiet gyro, judged by residual variance, and
+  captures the resting baseline) → **REFERENCE REPS** (buffer cleared at the transition;
+  detects reps and auto-finishes at 5) → **COMPLETE**. If no quiet baseline appears within
+  ~15 s it fails clearly so calibration can be retried. This keeps contaminated baselines
+  (e.g. ~70 dps noise) out of the profile; a good run measures ~1–3 dps.
+- **Latency budgets**: `LIVE_JEV_TIMEOUT_S` (default 2 s) and `LIVE_GEMINI_TIMEOUT_S`
+  (default 2 s). If a real provider exceeds its budget the pipeline immediately uses the
+  deterministic fallback/template (`JEV TIMEOUT → FALLBACK`, `GEMINI TIMEOUT → TEMPLATE`)
+  so the spoken cue never waits on the network. The provider actually used is logged and
+  shown in the UI debug panel.
 - **Start Set** clears the buffer; movement before it is never part of a set.
 - **Finish Set** finalizes immediately. A configurable idle auto-finish (~3 s) is an
   optional backup; manual finish overrides it.

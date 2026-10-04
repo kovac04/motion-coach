@@ -87,6 +87,7 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
   const [liveMetrics, setLiveMetrics] = useState<SetMetrics | null>(null)
   const [liveResult, setLiveResult] = useState<EvaluationResult | null>(null)
   const [latency, setLatency] = useState<Latency>({})
+  const [providers, setProviders] = useState<{ decision: string; language: string } | null>(null)
   const [voiceUsed, setVoiceUsed] = useState<VoiceUsed | null>(null)
   const [speaking, setSpeaking] = useState(false)
   const [autoSpeak, setAutoSpeak] = useState(true)
@@ -130,6 +131,7 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
       }
       setLiveMetrics(evaluation.metrics as SetMetrics)
       setLiveResult(mapped)
+      setProviders(evaluation.providers ?? null)
       setLatency((prev) => ({
         ...prev,
         metrics: Math.round(evaluation.timings_ms?.metrics ?? 0),
@@ -186,8 +188,7 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
     }
     setCountdown(0)
     await api.motionCalibrateStart()
-    setMessage('Perform 5 controlled reps now.')
-    await new Promise((r) => setTimeout(r, 500))
+    await new Promise((r) => setTimeout(r, 400))
     setCountdown(null)
   }
 
@@ -250,8 +251,25 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
             {status && <span className="chip">gaps {status.sequence_gaps}</span>}
           </div>
 
-          <div className={`live-state state-${mode}`}>{stateLabel}</div>
+          {mode !== 'CALIBRATING' && (
+            <div className={`live-state state-${mode}`}>{stateLabel}</div>
+          )}
           {mode === 'SET_ACTIVE' && <div className="meta-line">rep {motion?.rep_count ?? 0} detected</div>}
+          {cal?.active && cal.phase === 'WAITING_STILL' && (
+            <>
+              <div className="live-state state-CALIBRATING">HOLD STILL</div>
+              <p className="notice">
+                Getting a quiet baseline…
+                {cal.baseline_noise_dps != null ? ` (${cal.baseline_noise_dps} dps)` : ''}
+              </p>
+            </>
+          )}
+          {cal?.active && cal.phase === 'REPS' && (
+            <>
+              <div className="live-state state-SET_ACTIVE">REFERENCE REPS {cal.reps}/{cal.target}</div>
+              <p className="notice">Perform 5 controlled reps.</p>
+            </>
+          )}
 
           <ol className="steps">
             {STEPS.map((text, i) => (
@@ -260,11 +278,6 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
           </ol>
 
           {countdown !== null && <div className="countdown">{countdown > 0 ? countdown : 'GO'}</div>}
-          {cal?.active && (
-            <p className="notice">
-              Reference reps: <strong>{cal.reps} / {cal.target}</strong>
-            </p>
-          )}
           {message && <p className="notice">{message}</p>}
         </div>
 
@@ -320,7 +333,7 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
             <p className="notice mono">
               metrics {latency.metrics ?? '—'} ms · Jev {latency.jev ?? '—'} ms · Gemini {latency.gemini ?? '—'} ms
               <br />ElevenLabs {latency.elevenlabs ?? '—'} ms · total→audio {latency.total ?? '—'} ms
-              <br />voice {voiceUsed ?? '—'}
+              <br />providers: JEV={providers?.decision ?? '—'} · GEMINI={providers?.language ?? '—'} · voice {voiceUsed ?? '—'}
             </p>
           )}
         </div>

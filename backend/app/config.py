@@ -57,6 +57,12 @@ class Settings(BaseSettings):
     provider_connect_timeout: float = 5.0
     provider_request_timeout: float = 20.0
 
+    # Live-demo decision/language budgets (seconds). If a real provider exceeds
+    # its budget the pipeline immediately uses the deterministic fallback, so the
+    # spoken cue never waits on the network.
+    live_jev_timeout_s: float = 2.0
+    live_gemini_timeout_s: float = 2.0
+
     def provider_status(self) -> dict[str, dict[str, object]]:
         """Safe, non-secret summary for /health and /api/providers."""
         return {

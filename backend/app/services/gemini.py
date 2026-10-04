@@ -93,6 +93,12 @@ class LanguageService:
         response.latency_ms = (time.perf_counter() - started) * 1000.0
         return response
 
+    def template(
+        self, decision: MovementDecision, exercise_id: str, provider: str = "fallback"
+    ) -> CoachingResponse:
+        """Deterministic coaching template (used by budget timeouts and fallback)."""
+        return self._template(decision, exercise_id, provider)
+
     def _template(self, decision: MovementDecision, exercise_id: str, provider: str) -> CoachingResponse:
         profile = get_profile(exercise_id)
         text, label = coaching_template(decision, profile.display_name)

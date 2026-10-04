@@ -1,11 +1,16 @@
-"""Live motion service: explicit set control + calibration, feeding the existing
-decision -> language pipeline on completed sets.
+"""Live motion service: explicit set control + phased calibration, feeding the
+existing decision -> language pipeline on completed sets.
 
 Reuses CoachPipeline (Jev/Gemini + fallbacks) unchanged. Owns no BLE connection
 itself — it subscribes to the single SensorRuntime owner.
 
-Lifecycle (driven by the UI):
-    NO_PROFILE -> CALIBRATING -> READY -> SET_ACTIVE -> ANALYZING -> COACHING -> READY
+Set lifecycle (driven by the UI):
+    NO_PROFILE -> READY -> SET_ACTIVE -> ANALYZING -> COACHING -> READY
+
+Calibration lifecycle:
+    COUNTDOWN (client) -> WAITING_STILL -> REPS -> COMPLETE
+The still phase captures a clean resting baseline (gyro variance, not a blind
+timer) before any reference reps are collected.
 """
 
 from __future__ import annotations
@@ -13,18 +18,27 @@ from __future__ import annotations
 import logging
 import time
 
+import numpy as np
+
 from app.config import Settings
 from app.motion.calibration import CalibrationProfile, build_profile
 from app.motion.live import CompletedSet, LiveSetDetector
 from app.motion.pipeline import project_samples
 from app.motion.profiles import list_profiles, load_profile, save_profile
 from app.motion.segmentation import bootstrap_params, detect_reps
+from app.motion.signal import RestEstimate, as_matrix, lowpass, pca_axis, project
 from app.services.coach_pipeline import CoachPipeline
+from app.sensors.packet import GYRO_LSB_PER_DPS
 from app.sensors.runtime import SensorRuntime
 
 logger = logging.getLogger(__name__)
 
 CALIBRATION_TARGET_REPS = 5
+STILL_WINDOW_S = 0.75          # minimum genuinely-quiet baseline window
+STILL_TIMEOUT_S = 15.0         # give up if no quiet baseline in this time
+QUIET_RMS_DPS = 10.0           # residual gyro RMS below this counts as still
+PROCESS_INTERVAL_S = 0.2
+SAMPLE_RATE_HZ = 50.0
 
 
 class LiveMotionService:
@@ -39,11 +53,15 @@ class LiveMotionService:
         self.calibration_result: dict | None = None
         self._pipeline = CoachPipeline(settings)
         self._analyzing = False
-        # calibration capture
+        # calibration state
         self._calibrating = False
+        self._cal_phase = "IDLE"  # IDLE | WAITING_STILL | REPS
+        self._cal_still: list[list[float]] = []
         self._cal_rows: list[dict[str, float]] = []
         self._cal_reps = 0
         self._cal_last_process = 0.0
+        self._cal_started = 0.0
+        self._cal_baseline: RestEstimate | None = None
         self._load()
 
     # --- setup -------------------------------------------------------------
@@ -84,24 +102,34 @@ class LiveMotionService:
             return {"ok": False, "error": "no active set"}
         return await self._handle_completed(completed)
 
-    # --- calibration -------------------------------------------------------
+    # --- phased calibration -----------------------------------------------
     def start_calibration(self) -> dict:
         self.calibration_result = None
+        self._calibrating = True
+        self._cal_phase = "WAITING_STILL"
+        self._cal_still = []
         self._cal_rows = []
         self._cal_reps = 0
         self._cal_last_process = 0.0
-        self._calibrating = True
-        logger.info("CALIBRATION: started (target %d reps)", CALIBRATION_TARGET_REPS)
-        return {"ok": True, "target_reps": CALIBRATION_TARGET_REPS}
+        self._cal_started = time.monotonic()
+        self._cal_baseline = None
+        logger.info("CALIBRATION: waiting for quiet baseline")
+        return {"ok": True, "target_reps": CALIBRATION_TARGET_REPS, "phase": self._cal_phase}
 
     def finish_calibration(self) -> dict:
-        rows = self._cal_rows
         self._calibrating = False
-        if len(rows) < 150:
-            self.calibration_result = {"ok": False, "error": f"only {len(rows)} samples captured"}
+        self._cal_phase = "IDLE"
+        if self._cal_baseline is None:
+            self.calibration_result = {"ok": False, "error": "no quiet baseline captured"}
+            return self.calibration_result
+        if len(self._cal_rows) < 150:
+            self.calibration_result = {"ok": False, "error": f"only {len(self._cal_rows)} rep samples"}
             return self.calibration_result
         try:
-            profile = build_profile(self.exercise_id, [rows], source="live calibration")
+            profile = build_profile(
+                self.exercise_id, [self._cal_rows],
+                source="live calibration", rest_override=self._cal_baseline,
+            )
         except Exception as exc:  # noqa: BLE001
             self.calibration_result = {"ok": False, "error": str(exc)}
             return self.calibration_result
@@ -116,8 +144,9 @@ class LiveMotionService:
             "reference_excursion_deg": profile.reference_excursion_deg,
             "reference_peak_dps": profile.reference_peak_dps,
             "noise_dps": profile.noise_dps,
+            "axis_variance_fraction": profile.axis_variance_fraction,
         }
-        logger.info("CALIBRATION: complete (%s)", self.calibration_result)
+        logger.info("CALIBRATION: complete %s", self.calibration_result)
         return self.calibration_result
 
     # --- sample fan-in -----------------------------------------------------
@@ -130,30 +159,60 @@ class LiveMotionService:
                 self._schedule_completed(completed)
 
     def _capture_calibration(self, sample) -> None:
-        self._cal_rows.append(
-            {
-                "host_timestamp": sample.host_timestamp,
-                "gx_raw": float(sample.gx),
-                "gy_raw": float(sample.gy),
-                "gz_raw": float(sample.gz),
-            }
-        )
-        now = sample.host_timestamp or time.monotonic()
-        if now - self._cal_last_process < 0.2:
+        if self._cal_phase == "WAITING_STILL":
+            stamp = sample.host_timestamp if sample.host_timestamp is not None else time.monotonic()
+            self._cal_still.append([stamp, sample.gx, sample.gy, sample.gz])
+            if len(self._cal_still) > int(2.0 * SAMPLE_RATE_HZ):
+                self._cal_still.pop(0)
+            rms = self._still_rms()
+            if rms is not None and rms <= QUIET_RMS_DPS:
+                window = np.asarray(self._cal_still[-int(STILL_WINDOW_S * SAMPLE_RATE_HZ):], dtype=float)[:, 1:]
+                self._cal_baseline = RestEstimate(
+                    bias=window.mean(axis=0),
+                    noise_dps=max(float(rms), 0.5),
+                    window_start=0, window_end=len(window),
+                )
+                self._cal_phase = "REPS"
+                self._cal_rows = []  # clear: no pre-rep data in reference capture
+                self._cal_last_process = 0.0
+                logger.info("CALIBRATION: baseline captured (noise %.2f dps) -> REPS", rms)
+            elif time.monotonic() - self._cal_started > STILL_TIMEOUT_S:
+                logger.warning("CALIBRATION: no quiet baseline within %.0fs", STILL_TIMEOUT_S)
+                self._calibrating = False
+                self._cal_phase = "IDLE"
+                self.calibration_result = {"ok": False, "error": "could not get a quiet baseline; hold still and retry"}
             return
-        self._cal_last_process = now
-        self._cal_reps = self._count_reps(self._cal_rows)
-        if self._cal_reps >= CALIBRATION_TARGET_REPS:
-            self.finish_calibration()
 
-    @staticmethod
-    def _count_reps(rows: list[dict[str, float]]) -> int:
-        if len(rows) < 100:
+        if self._cal_phase == "REPS":
+            self._cal_rows.append({
+                "host_timestamp": sample.host_timestamp,
+                "gx_raw": float(sample.gx), "gy_raw": float(sample.gy), "gz_raw": float(sample.gz),
+            })
+            now = sample.host_timestamp if sample.host_timestamp is not None else time.monotonic()
+            if now - self._cal_last_process < PROCESS_INTERVAL_S:
+                return
+            self._cal_last_process = now
+            self._cal_reps = self._count_reps(self._cal_rows)
+            if self._cal_reps >= CALIBRATION_TARGET_REPS:
+                self.finish_calibration()
+
+    def _still_rms(self) -> float | None:
+        needed = int(STILL_WINDOW_S * SAMPLE_RATE_HZ)
+        if len(self._cal_still) < needed:
+            return None
+        window = np.asarray(self._cal_still[-needed:], dtype=float)[:, 1:]
+        center = window.mean(axis=0)
+        residual = np.linalg.norm(window - center, axis=1)
+        return float(np.sqrt(np.mean(residual ** 2)) / GYRO_LSB_PER_DPS)
+
+    def _count_reps(self, rows: list[dict[str, float]]) -> int:
+        if len(rows) < 100 or self._cal_baseline is None:
             return 0
+        t, g = as_matrix(rows)
         try:
-            projected = project_samples(rows, None, self_calibrate=True)
-            return len(detect_reps(projected.t, projected.velocity_dps,
-                                   bootstrap_params(projected.rest.noise_dps)))
+            axis, _ = pca_axis(g, self._cal_baseline.bias, self._cal_baseline.noise_dps)
+            velocity = lowpass(project(g, self._cal_baseline.bias, axis), 5)
+            return len(detect_reps(t, velocity, bootstrap_params(self._cal_baseline.noise_dps)))
         except Exception:  # noqa: BLE001
             return 0
 
@@ -203,11 +262,11 @@ class LiveMotionService:
         finally:
             self._analyzing = False
 
-        metrics_ms = (time.perf_counter() - started) * 1000.0
+        total_ms = (time.perf_counter() - started) * 1000.0
         decision_ms = result.timings_ms.get("decision", 0.0)
         gemini_ms = result.timings_ms.get("coaching", 0.0)
         timings = {
-            "metrics": round(metrics_ms - decision_ms - gemini_ms, 1),
+            "metrics": round(max(total_ms - decision_ms - gemini_ms, 0.0), 1),
             "jev": round(decision_ms, 1),
             "gemini": round(gemini_ms, 1),
         }
@@ -220,6 +279,10 @@ class LiveMotionService:
             "decision": result.decision.model_dump(),
             "coaching": result.coaching.model_dump(),
             "timings_ms": timings,
+            "providers": {
+                "decision": result.decision.provider,
+                "language": result.coaching.provider,
+            },
         }
         return self.last_evaluation
 
@@ -253,8 +316,10 @@ class LiveMotionService:
             "available_profiles": list_profiles(),
             "calibration": {
                 "active": self._calibrating,
+                "phase": self._cal_phase,
                 "reps": self._cal_reps,
                 "target": CALIBRATION_TARGET_REPS,
+                "baseline_noise_dps": round(self._cal_baseline.noise_dps, 2) if self._cal_baseline else None,
                 "result": self.calibration_result,
             },
             "last_evaluation": self.last_evaluation,

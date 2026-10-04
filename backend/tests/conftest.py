@@ -18,5 +18,7 @@ os.environ.update(
         "ELEVENLABS_API_KEY": "",
         "ELEVENLABS_VOICE_ID": "",
         "SENSOR_ENABLED": "false",
+        "LIVE_JEV_TIMEOUT_S": "2.0",
+        "LIVE_GEMINI_TIMEOUT_S": "2.0",
     }
 )

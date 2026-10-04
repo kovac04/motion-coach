@@ -20,6 +20,7 @@ import numpy as np
 
 from app.motion.segmentation import DetectorParams, RepSpan, bootstrap_params, detect_reps
 from app.motion.signal import (
+    RestEstimate,
     canonicalize_waveform,
     estimate_rest,
     lowpass,
@@ -102,12 +103,17 @@ def _project(samples: list[dict[str, float]], rest, axis: np.ndarray) -> tuple[n
 
 
 def build_profile(exercise_id: str, recordings: list[list[dict[str, float]]],
-                  source: str = "") -> CalibrationProfile:
+                  source: str = "",
+                  rest_override: RestEstimate | None = None) -> CalibrationProfile:
     """Build a profile from one or more recordings (usually the GOOD ones).
 
     Each recording is self-calibrated for its own PCA axis so different mounts do
     not corrupt the reference statistics. The first recording's axis/bias/noise
     become the profile's live defaults.
+
+    ``rest_override`` supplies a resting baseline measured separately (the live
+    HOLD STILL phase) instead of estimating it from the movement capture. This is
+    what keeps contaminated baselines out of live calibration.
     """
     if not recordings:
         raise ValueError("no recordings supplied")
@@ -123,9 +129,12 @@ def build_profile(exercise_id: str, recordings: list[list[dict[str, float]]],
 
     for index, samples in enumerate(recordings):
         t, g = _as_matrix(samples)
-        # Short window: recordings (especially live calibration) may only pause
-        # briefly, so a 1 s window can miss the true rest and inflate noise.
-        rest = estimate_rest(t, g, window_s=0.5, step_s=0.1)
+        if rest_override is not None:
+            rest = rest_override
+        else:
+            # Short window: recordings (especially live calibration) may only pause
+            # briefly, so a 1 s window can miss the true rest and inflate noise.
+            rest = estimate_rest(t, g, window_s=0.5, step_s=0.1)
         axis, frac = pca_axis(g, rest.bias, rest.noise_dps)
         t, velocity = _project(samples, rest, axis)
         params = bootstrap_params(rest.noise_dps)

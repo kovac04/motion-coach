@@ -1,4 +1,4 @@
-.PHONY: install install-backend install-frontend backend frontend test test-backend build lint smoke smoke-pipeline smoke-gemini smoke-elevenlabs smoke-jev firmware-build firmware-upload imu-monitor imu-record imu-plot clean
+.PHONY: install install-backend install-frontend backend frontend test test-backend build lint smoke smoke-pipeline smoke-gemini smoke-elevenlabs smoke-jev firmware-build firmware-upload imu-monitor imu-record imu-plot imu-analyze clean
 
 install: install-backend install-frontend
 
@@ -56,10 +56,13 @@ imu-monitor:
 	cd backend && uv run python ../scripts/imu_monitor.py
 
 imu-record:
-	cd backend && uv run python ../scripts/imu_record.py --name $(NAME)
+	cd backend && uv run python ../scripts/imu_record.py --name $(NAME) $(if $(SECONDS),--seconds $(SECONDS),)
 
 imu-plot:
-	cd backend && uv run python ../scripts/imu_plot.py --file $(FILE)
+	cd backend && uv run python ../scripts/imu_plot.py --file $(FILE) $(if $(SMOOTH),--smooth $(SMOOTH),)
+
+imu-analyze:
+	cd backend && uv run python ../scripts/imu_analyze.py --file $(FILE)
 
 clean:
 	rm -rf backend/.pytest_cache frontend/dist

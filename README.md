@@ -96,9 +96,12 @@ make firmware-monitor # 115200 serial monitor
 
 # IMU over BLE (wearable must be powered and advertising)
 make imu-monitor                 # live ~50 Hz diagnostics
-make imu-record NAME=good-01     # record to data/recordings/good-01.csv
+make imu-record NAME=good-01     # record to data/recordings/good-01.csv (Ctrl-C to stop)
 make imu-plot FILE=data/recordings/good-01.csv
+make imu-analyze FILE=data/recordings/good-01.csv
 ```
+
+Recording protocol and inspection workflow: `docs/DATA_COLLECTION.md`.
 
 Smoke tests never run during `pytest` and never print keys.
 
@@ -155,6 +158,7 @@ produce a valid `RepMetrics` / `SetMetrics` (`backend/app/models/metrics.py`) an
 ## Docs
 
 - `docs/ARCHITECTURE.md` — layers, boundaries, metric conventions, sensor boundary
+- `docs/DATA_COLLECTION.md` — how to record and inspect real motion data
 - `docs/API.md` — HTTP endpoints
 - `docs/JEV_PROVIDER.md` — what must be verified before the real Jev adapter
 - `docs/BUILD_LOG.md` — provenance / timestamps

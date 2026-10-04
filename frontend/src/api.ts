@@ -67,6 +67,8 @@ export const api = {
   evaluateSet: (metrics: SetMetrics) => postJson<EvaluationResult>('/api/evaluate/set', metrics),
   evaluateRep: (metrics: RepMetrics) => postJson<EvaluationResult>('/api/evaluate/rep', metrics),
   motionStatus: () => getJson<MotionStatus>('/api/motion/status'),
+  selectExercise: (exerciseId: string) =>
+    postJson<MotionActionResult>('/api/motion/exercise', { exercise_id: exerciseId }),
   motionSetStart: () => postJson<MotionActionResult>('/api/motion/set/start', {}),
   motionSetFinish: () => postJson<MotionFinishResult>('/api/motion/set/finish', {}),
   motionCalibrateStart: () => postJson<MotionActionResult>('/api/motion/calibrate/start', {}),

@@ -21,11 +21,12 @@ import time
 import numpy as np
 
 from app.config import Settings
+from app.exercises import LIVE_EXERCISE_IDS, get_profile, list_live_profiles
 from app.motion.calibration import CalibrationProfile, build_profile
 from app.motion.debug import save_live_set
 from app.motion.live import CompletedSet, LiveSetDetector
 from app.motion.pipeline import project_samples
-from app.motion.profiles import list_profiles, load_profile, save_profile
+from app.motion.profiles import list_profiles, load_profile, profile_path, save_profile
 from app.motion.segmentation import bootstrap_params, detect_reps
 from app.motion.signal import RestEstimate, as_matrix, lowpass, pca_axis, project
 from app.services.coach_pipeline import CoachPipeline
@@ -77,6 +78,30 @@ class LiveMotionService:
         self.profile = profile
         self.exercise_id = profile.exercise_id
         self.detector = LiveSetDetector(profile)
+
+    def select_exercise(self, exercise_id: str) -> dict:
+        """Switch the active exercise and load its own saved calibration profile."""
+        if exercise_id not in LIVE_EXERCISE_IDS:
+            return {"ok": False, "error": f"unsupported exercise: {exercise_id}"}
+        if self._calibrating:
+            return {"ok": False, "error": "cannot switch exercise during calibration"}
+        if self.detector is not None and self.detector.state_name == "ACTIVE":
+            return {"ok": False, "error": "cannot switch exercise during an active set"}
+
+        self.exercise_id = exercise_id
+        self.last_evaluation = None
+        self.last_timings_ms = None
+        self.last_completed = None
+        self.calibration_result = None
+        self.profile = load_profile(exercise_id)
+        self.detector = LiveSetDetector(self.profile) if self.profile else None
+        logger.info("EXERCISE: selected %s (profile=%s)", exercise_id, self.profile is not None)
+        return {
+            "ok": True,
+            "exercise_id": exercise_id,
+            "has_profile": self.profile is not None,
+            "mode": self._mode(),
+        }
 
     # --- explicit set control ---------------------------------------------
     def start_set(self) -> dict:
@@ -313,6 +338,28 @@ class LiveMotionService:
             return "COACHING"
         return "READY"
 
+    def _profile_info(self) -> dict | None:
+        if self.profile is None:
+            return None
+        return {
+            "reference_duration_ms": self.profile.reference_duration_ms,
+            "reference_excursion_deg": self.profile.reference_excursion_deg,
+            "reference_peak_dps": self.profile.reference_peak_dps,
+            "axis_variance_fraction": self.profile.axis_variance_fraction,
+            "noise_dps": self.profile.noise_dps,
+            "axis": [round(x, 3) for x in self.profile.axis],
+        }
+
+    def available_exercises(self) -> list[dict]:
+        return [
+            {
+                "id": profile.id,
+                "display_name": profile.display_name,
+                "calibrated": profile_path(profile.id).exists(),
+            }
+            for profile in list_live_profiles()
+        ]
+
     def motion_status(self) -> dict:
         detector = self.detector.status() if self.detector else {
             "state": "READY", "rep_count": 0, "auto_finish": True,
@@ -327,6 +374,8 @@ class LiveMotionService:
             "exercise_id": self.exercise_id,
             "has_profile": self.profile is not None,
             "available_profiles": list_profiles(),
+            "available_exercises": self.available_exercises(),
+            "profile_info": self._profile_info(),
             "calibration": {
                 "active": self._calibrating,
                 "phase": self._cal_phase,

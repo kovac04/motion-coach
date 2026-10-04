@@ -39,6 +39,17 @@ def test_within_bounds_classified_good():
     assert decision.severity is Severity.NONE
 
 
+def test_good_set_does_not_speak():
+    decision = evaluate_decision(_rep(2000))
+    assert decision.should_speak is False
+
+
+def test_deviations_request_speech():
+    assert evaluate_decision(_rep(1500)).should_speak is True          # too fast
+    assert evaluate_decision(_rep(2600)).should_speak is True          # too slow
+    assert evaluate_decision(_rep(2000, rom=80)).should_speak is True  # insufficient ROM
+
+
 def test_set_consistency_classification():
     reps = [_rep(d) for d in [1600, 2400, 1700, 2300, 1650]]
     metrics = build_set_metrics("bicep_curl", reps)

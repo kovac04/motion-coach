@@ -131,7 +131,7 @@ def evaluate_decision(metrics: RepMetrics | SetMetrics) -> MovementDecision:
         primary_issue=issue,
         coaching_priority=priority,
         severity=severity,
-        should_speak=True,
+        should_speak=severity is not Severity.NONE,
         overall_quality=_quality_from_severity(severity),
         confidence=min(confidence, 0.95),
         evidence=evidence,

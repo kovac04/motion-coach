@@ -129,6 +129,24 @@ The browser dashboard has two separated tabs — **LIVE WEARABLE** (primary) and
 **SYNTHETIC DEMO** — so synthetic scenarios can never be mistaken for a live set.
 Live results populate the main Set/Decision/Coach panels with `source=live` logged.
 
+## Multiple exercises
+
+Each exercise has its own calibration profile (`data/profiles/<exercise_id>.json`) and
+its own PCA axis — nothing is shared. `POST /api/motion/exercise` switches the active
+exercise and auto-loads its saved profile; switching is rejected during an active set or
+calibration. Live-selectable exercises are limited to clear cyclical rotational wrist
+motion: bicep curl, lateral raise, triceps extension, front raise. Bench press is
+deliberately excluded (translation with little orientation change makes gyro excursion
+untrustworthy). This proves "exercise-specific calibration lets one generic pipeline adapt",
+not "any exercise works".
+
+## When coaching is spoken
+
+The decision's `should_speak` is the single source of truth. A GOOD set with no meaningful
+deviation returns `should_speak=false`: the UI still shows the result and positive text, but
+ElevenLabs is not called. Only a meaningful actionable deviation requests speech. This
+applies to both the Jev question and the deterministic fallback (`should_speak = severity != NONE`).
+
 ## Honest limitations
 
 - `rom_deg` is a relative rotation estimate, not joint angle.

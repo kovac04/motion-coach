@@ -120,6 +120,13 @@ also `rep_count`, `auto_finish`, `idle_timeout_s`, `has_profile`, `available_pro
   `{ ok, rejected?, reason?, source:"live", rep_count, metrics, decision, coaching, timings_ms }`
   or `{ ok:false, error }` if no set is active.
 
+`POST /api/motion/exercise`
+: `{ "exercise_id": "lateral_raise" }` switches the active exercise and loads its own
+  saved calibration profile (if any). Rejected during an active set or calibration. Returns
+  `{ ok, exercise_id, has_profile, mode }`. The status payload also exposes
+  `available_exercises` (with a `calibrated` flag) and `profile_info`
+  (reference duration/excursion/peak, PCA variance, noise).
+
 `POST /api/motion/auto-finish`
 : `{ "enabled": true }` toggles the 3 s idle auto-finish backup.
 

@@ -44,7 +44,7 @@ _MOCK_SCENARIOS: dict[str, MovementDecision] = {
         primary_issue=PrimaryIssue.GOOD,
         coaching_priority=CoachingPriority.NONE,
         severity=Severity.NONE,
-        should_speak=True,
+        should_speak=False,
         overall_quality=OverallQuality.EXCELLENT,
         confidence=0.94,
         evidence=["duration_ratio=1.01", "rom_ratio=1.00", "consistency_score=0.97"],
@@ -169,10 +169,16 @@ JEV_QUESTIONS: dict[str, dict] = {
     },
     "should_speak": {
         "type": "noul",
-        "instructions": "Should the athlete hear one short spoken coaching cue after this set?",
+        "instructions": (
+            "Is there a meaningful, actionable deviation that is worth interrupting the "
+            "athlete with spoken coaching after this set?"
+        ),
         "criteria": {
-            "true": "A cue would help, or brief positive reinforcement is appropriate.",
-            "false": "No spoken feedback is warranted.",
+            "true": "There is a clear deviation the athlete should correct next set.",
+            "false": (
+                "The set is good or excellent, or any deviation is too small to warrant "
+                "spoken feedback. Do not speak just to give positive reinforcement."
+            ),
         },
     },
     "overall_quality": {

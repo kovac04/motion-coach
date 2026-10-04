@@ -161,6 +161,21 @@ export interface MotionLatency {
   gemini?: number
 }
 
+export interface AvailableExercise {
+  id: string
+  display_name: string
+  calibrated: boolean
+}
+
+export interface ProfileInfo {
+  reference_duration_ms: number
+  reference_excursion_deg: number
+  reference_peak_dps: number
+  axis_variance_fraction: number
+  noise_dps: number
+  axis: number[]
+}
+
 export interface MotionStatus {
   mode: string // NO_PROFILE | CALIBRATING | READY | SET_ACTIVE | ANALYZING | COACHING
   state: string // READY | ACTIVE
@@ -170,6 +185,8 @@ export interface MotionStatus {
   exercise_id: string
   has_profile: boolean
   available_profiles: string[]
+  available_exercises: AvailableExercise[]
+  profile_info: ProfileInfo | null
   calibration: MotionCalibration
   last_evaluation: CoachingResult | null
   latency_ms: MotionLatency | null

@@ -140,7 +140,10 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
         jev: Math.round(evaluation.timings_ms?.jev ?? 0),
         gemini: Math.round(evaluation.timings_ms?.gemini ?? 0),
       }))
-      if (autoSpeak) void speak(evaluation.coaching.text, totalFromFinish)
+      // decision.should_speak is the source of truth: GOOD sets are shown but not spoken.
+      if (autoSpeak && !evaluation.rejected && evaluation.decision.should_speak) {
+        void speak(evaluation.coaching.text, totalFromFinish)
+      }
     },
     [autoSpeak, speak],
   )
@@ -194,6 +197,21 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
     setCountdown(null)
   }
 
+  const selectExercise = async (exerciseId: string) => {
+    if (exerciseId === motion?.exercise_id) return
+    stopSpeaking()
+    const result = await api.selectExercise(exerciseId)
+    if (!result.ok) {
+      setMessage(result.error ?? 'Could not switch exercise')
+      return
+    }
+    setLiveMetrics(null)
+    setLiveResult(null)
+    setLatency({})
+    setVoiceMeta(null)
+    setMessage(null)
+  }
+
   const startSet = async () => {
     stopSpeaking()
     setLiveMetrics(null)
@@ -234,6 +252,8 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
   }
 
   const step = currentStep(motion)
+  const exerciseName = motion?.available_exercises.find((ex) => ex.id === motion.exercise_id)?.display_name
+    ?? motion?.exercise_id ?? 'Exercise'
   const stateLabel = mode === 'SET_ACTIVE' ? 'SET ACTIVE'
     : mode === 'ANALYZING' ? 'ANALYZING…'
     : mode === 'CALIBRATING' ? 'CALIBRATING'
@@ -289,11 +309,31 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
         </div>
 
         <div className="panel">
+          <h2>Exercise</h2>
+          <div className="field">
+            <select
+              value={motion?.exercise_id ?? ''}
+              onChange={(e) => void selectExercise(e.target.value)}
+              disabled={mode === 'SET_ACTIVE' || cal?.active || countdown !== null}
+            >
+              {(motion?.available_exercises ?? []).map((ex) => (
+                <option key={ex.id} value={ex.id}>{ex.display_name}</option>
+              ))}
+            </select>
+          </div>
+          <p className="notice">
+            {motion?.has_profile
+              ? <span style={{ color: 'var(--good)' }}>CALIBRATED</span>
+              : <span style={{ color: 'var(--warn)' }}>NOT CALIBRATED — calibrate this exercise first.</span>}
+          </p>
+        </div>
+
+        <div className="panel">
           <h2>Controls</h2>
           <div className="actions">
             <button className="btn btn-ghost" onClick={() => void runCalibration()}
               disabled={!connected || mode === 'CALIBRATING' || countdown !== null}>
-              {mode === 'NO_PROFILE' ? 'Calibrate Bicep Curl' : 'Calibrate'}
+              Calibrate {exerciseName}
             </button>
             <button className="btn btn-primary" onClick={() => void startSet()}
               disabled={!connected || !motion?.has_profile || mode === 'SET_ACTIVE' || cal?.active}>
@@ -338,7 +378,17 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
           </button>
           {showDebug && (
             <p className="notice mono">
-              metrics {latency.metrics ?? '—'} ms · Jev {latency.jev ?? '—'} ms · Gemini {latency.gemini ?? '—'} ms
+              exercise {motion?.exercise_id ?? '—'} · profile {motion?.has_profile ? 'loaded' : 'none'}
+              {motion?.profile_info && (
+                <>
+                  <br />ref {motion.profile_info.reference_duration_ms.toFixed(0)}ms ·{' '}
+                  {motion.profile_info.reference_excursion_deg.toFixed(0)}° ·{' '}
+                  {motion.profile_info.reference_peak_dps.toFixed(0)}°/s · PCA{' '}
+                  {(motion.profile_info.axis_variance_fraction * 100).toFixed(0)}% · noise{' '}
+                  {motion.profile_info.noise_dps.toFixed(1)} dps
+                </>
+              )}
+              <br />metrics {latency.metrics ?? '—'} ms · Jev {latency.jev ?? '—'} ms · Gemini {latency.gemini ?? '—'} ms
               <br />ElevenLabs {latency.elevenlabs ?? '—'} ms · total→audio {latency.total ?? '—'} ms
               <br />providers: JEV={providers?.decision ?? '—'} · GEMINI={providers?.language ?? '—'}
               <br />voice {voiceUsed ?? '—'} · id {voiceMeta?.voiceId ?? '—'} · model {voiceMeta?.modelId ?? '—'} · fmt {voiceMeta?.outputFormat ?? '—'} · {voiceMeta?.bytes ?? '—'} bytes

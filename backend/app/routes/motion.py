@@ -12,6 +12,10 @@ class AutoFinishRequest(BaseModel):
     enabled: bool = True
 
 
+class ExerciseRequest(BaseModel):
+    exercise_id: str
+
+
 def _motion(request: Request) -> LiveMotionService:
     return request.app.state.motion
 
@@ -19,6 +23,11 @@ def _motion(request: Request) -> LiveMotionService:
 @router.get("/status")
 def motion_status(request: Request) -> dict:
     return _motion(request).motion_status()
+
+
+@router.post("/exercise")
+def select_exercise(request: Request, body: ExerciseRequest) -> dict:
+    return _motion(request).select_exercise(body.exercise_id)
 
 
 @router.post("/set/start")

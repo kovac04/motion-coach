@@ -1,67 +1,83 @@
 """Live BLE IMU monitor. Run with `make imu-monitor`.
 
-Prints one line per second: device, packet count, effective Hz, last raw axes,
-and sequence gaps. Never dumps 50 lines/second.
+Runs until Ctrl-C. Owns a single BLE connection via ``SensorRuntime``,
+reconnects automatically, prints a compact status line about once per second,
+and disconnects cleanly on Ctrl-C.
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import signal
 import sys
 import time
+from contextlib import suppress
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
-from app.sensors import BleImuClient, DeviceNotFoundError, SequenceTracker  # noqa: E402
+from app.sensors.runtime import SensorRuntime  # noqa: E402
 
 
-async def run(device_name: str) -> int:
-    client = BleImuClient(device_name=device_name)
-    tracker = SequenceTracker()
+async def run(device_name: str, retry_delay: float) -> int:
+    runtime = SensorRuntime(device_name=device_name, retry_delay=retry_delay)
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        with suppress(NotImplementedError):
+            loop.add_signal_handler(sig, stop.set)
 
-    print(f"Scanning for {device_name!r} ...")
-    window_count = 0
-    window_start = time.monotonic()
-    last_report = window_start
-    latest = None
+    print(f"Scanning for {device_name!r} ... (Ctrl-C to stop)")
+    await runtime.start()
 
-    try:
-        async for sample in client.stream():
-            tracker.observe(sample.sequence)
-            latest = sample
-            window_count += 1
+    was_connected = False
+    last_report = 0.0
+    while not stop.is_set():
+        await asyncio.sleep(0.2)
+        status = runtime.status()
+        connected = status["connected"]
 
-            now = time.monotonic()
-            if now - last_report >= 1.0:
-                elapsed = now - window_start
-                hz = window_count / elapsed if elapsed > 0 else 0.0
-                assert latest is not None
+        if connected and not was_connected:
+            print(f"Connected to {status['address'] or device_name}")
+        elif not connected and was_connected:
+            print("Disconnected; rescanning ...")
+        was_connected = connected
+
+        now = time.monotonic()
+        if now - last_report >= 1.0:
+            sample = status["sample"]
+            if sample:
                 print(
-                    f"{client.address} | ~{hz:5.1f} Hz | seq={latest.sequence:5d} | "
-                    f"acc=({latest.ax:6d},{latest.ay:6d},{latest.az:6d}) | "
-                    f"gyro=({latest.gx:6d},{latest.gy:6d},{latest.gz:6d}) | "
-                    f"gaps={tracker.gaps}"
+                    f"{status['address']} | ~{status['sample_rate_hz']:5.1f} Hz | "
+                    f"seq={sample['sequence']:5d} | "
+                    f"acc=({sample['ax']:6d},{sample['ay']:6d},{sample['az']:6d}) | "
+                    f"gyro=({sample['gx']:6d},{sample['gy']:6d},{sample['gz']:6d}) | "
+                    f"gaps={status['sequence_gaps']}"
                 )
-                window_count = 0
-                window_start = now
-                last_report = now
-    except DeviceNotFoundError as exc:
-        print(f"NOT FOUND: {exc}")
-        print("Is the wearable powered and advertising MotionCoach-IMU?")
-        return 2
-    except KeyboardInterrupt:
-        pass
+            else:
+                print("Waiting for MotionCoach-IMU ...")
+            last_report = now
 
-    print(f"\nDisconnected. total_gaps={tracker.gaps} missing={tracker.missing} malformed={client.malformed}")
+    await runtime.stop()
+    status = runtime.status()
+    print(
+        f"\nStopped. gaps={status['sequence_gaps']} "
+        f"missing={status['missing_samples']} malformed={status['malformed']}"
+    )
     return 0
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--name", default="MotionCoach-IMU")
-    return asyncio.run(run(parser.parse_args().name))
+    parser.add_argument("--retry-delay", type=float, default=2.0)
+    args = parser.parse_args()
+    try:
+        return asyncio.run(run(args.name, args.retry_delay))
+    except KeyboardInterrupt:
+        print("\nStopped.")
+        return 0
 
 
 if __name__ == "__main__":

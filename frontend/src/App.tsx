@@ -3,6 +3,7 @@ import { api, type CustomSetControls } from './api'
 import { CoachPanel } from './components/CoachPanel'
 import { DecisionPanel } from './components/DecisionPanel'
 import { DevPanel } from './components/DevPanel'
+import { LiveSensor } from './components/LiveSensor'
 import { RepHistory } from './components/RepHistory'
 import { ScenarioPanel } from './components/ScenarioPanel'
 import { SetSummary } from './components/SetSummary'
@@ -152,6 +153,8 @@ export default function App() {
 
       <div className="grid">
         <div className="stack">
+          <LiveSensor />
+
           <div className="panel">
             <h2>Exercise</h2>
             <div className="field">

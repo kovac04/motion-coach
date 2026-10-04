@@ -12,11 +12,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 
 from .packet import ImuSample, decode_packet
 
 logger = logging.getLogger(__name__)
+
+# Called on connection lifecycle changes: ("connected"|"disconnected"|"not_found"|"error", detail)
+StatusCallback = Callable[[str, str | None], None]
 
 DEVICE_NAME = "MotionCoach-IMU"
 MOTION_SERVICE_UUID = "8a1f0001-6b2e-4c3d-9e5f-0a1b2c3d4e5f"
@@ -107,3 +110,38 @@ class BleImuClient:
         device = await self.find_device()
         async with BleakClient(device) as client:
             await client.write_gatt_char(self.control_uuid, command.encode("ascii"), response=False)
+
+
+async def reconnecting_stream(
+    client: BleImuClient,
+    on_status: StatusCallback | None = None,
+    retry_delay: float = 2.0,
+) -> AsyncIterator[ImuSample]:
+    """Yield samples forever, reconnecting automatically after any disconnect.
+
+    Emits lifecycle events through ``on_status`` so callers can show
+    connected/disconnected state without building a connection framework.
+    """
+    def emit(state: str, detail: str | None = None) -> None:
+        if on_status is not None:
+            on_status(state, detail)
+
+    while True:
+        try:
+            async for sample in client.stream():
+                # First sample confirms the link is live.
+                if not getattr(client, "_was_connected", False):
+                    client._was_connected = True  # type: ignore[attr-defined]
+                    emit("connected", client.address)
+                yield sample
+        except asyncio.CancelledError:
+            raise
+        except DeviceNotFoundError as exc:
+            emit("not_found", str(exc))
+        except Exception as exc:  # noqa: BLE001 - keep the monitor alive
+            logger.warning("BLE stream error: %s", exc)
+            emit("error", str(exc))
+
+        client._was_connected = False  # type: ignore[attr-defined]
+        emit("disconnected", None)
+        await asyncio.sleep(retry_delay)

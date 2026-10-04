@@ -8,7 +8,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': backend,
+      // ws: true so the /api/sensor/stream WebSocket is proxied too.
+      '/api': { target: backend, ws: true },
       '/health': backend,
     },
   },

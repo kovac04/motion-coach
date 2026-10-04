@@ -96,6 +96,36 @@ export interface ProviderStatus {
   model: string | null
 }
 
+export interface SensorSamplePayload {
+  sequence: number
+  timestamp_ms: number
+  ax: number
+  ay: number
+  az: number
+  gx: number
+  gy: number
+  gz: number
+  accel_magnitude: number
+  gyro_magnitude: number
+}
+
+export interface SensorStatus {
+  connected: boolean
+  device_name: string
+  address: string | null
+  sample_rate_hz: number
+  sequence_gaps: number
+  missing_samples: number
+  malformed: number
+  connections: number
+  last_error: string | null
+  last_seen: number | null
+  sample: SensorSamplePayload | null
+}
+
+// [host_timestamp, gyro_magnitude, accel_magnitude]
+export type SensorPoint = [number, number, number]
+
 export interface Health {
   status: string
   app_env: string

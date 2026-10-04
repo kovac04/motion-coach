@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import coaching, demo, health
+from app.routes import coaching, demo, health, sensor
+from app.sensors import SensorRuntime
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,7 +18,32 @@ logging.basicConfig(
 )
 logger = logging.getLogger("motion_coach")
 
-app = FastAPI(title="Motion Coach API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Own exactly one live BLE sensor runtime for the whole process."""
+    settings = get_settings()
+    if settings.sensor_enabled:
+        logger.info("Starting live IMU sensor runtime")
+        await app.state.sensor.start()
+    else:
+        logger.info("Live IMU sensor disabled (set SENSOR_ENABLED=true to enable)")
+    try:
+        yield
+    finally:
+        await app.state.sensor.stop()
+
+
+app = FastAPI(title="Motion Coach API", version="0.1.0", lifespan=lifespan)
+
+# Created eagerly so routes always have a runtime, even if lifespan does not run
+# (e.g. plain TestClient) or the sensor is disabled.
+_settings = get_settings()
+app.state.sensor = SensorRuntime(
+    device_name=_settings.sensor_device_name,
+    buffer_seconds=_settings.sensor_buffer_seconds,
+    retry_delay=_settings.sensor_retry_delay,
+)
 
 app.add_middleware(
     CORSMiddleware,
@@ -29,6 +56,7 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(demo.router)
 app.include_router(coaching.router)
+app.include_router(sensor.router)
 
 
 @app.middleware("http")

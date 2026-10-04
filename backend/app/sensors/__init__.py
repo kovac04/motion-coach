@@ -16,8 +16,11 @@ from app.sensors.packet import (
     decode_packet,
 )
 from app.sensors.recorder import CSV_HEADER, RecordingStats, record_stream
+from app.sensors.runtime import SensorRuntime, SensorStatus
 
 __all__ = [
+    "SensorRuntime",
+    "SensorStatus",
     "CONTROL_CHARACTERISTIC_UUID",
     "DEVICE_NAME",
     "IMU_DATA_CHARACTERISTIC_UUID",

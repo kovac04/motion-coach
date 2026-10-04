@@ -46,6 +46,13 @@ class Settings(BaseSettings):
 
     database_url: str = ""
 
+    # Live IMU sensor runtime (single BLE owner). Disabled by default so tests
+    # and the offline demo never touch Bluetooth.
+    sensor_enabled: bool = False
+    sensor_device_name: str = "MotionCoach-IMU"
+    sensor_buffer_seconds: float = 6.0
+    sensor_retry_delay: float = 2.0
+
     # Timeouts (seconds) for paid providers.
     provider_connect_timeout: float = 5.0
     provider_request_timeout: float = 20.0

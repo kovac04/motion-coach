@@ -385,6 +385,45 @@ input[type='range'] {
   left: 20px;
 }
 
+/* Live sensor */
+.live-status {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.live-values {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.live-values > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  padding-bottom: 5px;
+}
+.live-values .name {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.live-values .mono {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.spark-svg {
+  width: 100%;
+  height: 60px;
+  margin-top: 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
 /* Rep history */
 .rep-table {
   width: 100%;

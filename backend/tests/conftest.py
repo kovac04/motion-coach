@@ -17,5 +17,6 @@ os.environ.update(
         "GEMINI_API_KEY": "",
         "ELEVENLABS_API_KEY": "",
         "ELEVENLABS_VOICE_ID": "",
+        "SENSOR_ENABLED": "false",
     }
 )

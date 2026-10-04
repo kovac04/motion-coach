@@ -53,6 +53,16 @@ def test_invalid_metrics_rejected():
     assert response.status_code == 422
 
 
+def test_sensor_status_offline():
+    response = client.get("/api/sensor/status")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["connected"] is False
+    assert body["device_name"] == "MotionCoach-IMU"
+    assert "sample_rate_hz" in body
+    assert body["sample"] is None
+
+
 def test_custom_set_endpoint():
     response = client.post(
         "/api/demo/custom",

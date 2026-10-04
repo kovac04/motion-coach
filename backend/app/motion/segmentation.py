@@ -26,8 +26,9 @@ class DetectorParams:
     stop_debounce: int = 5
     refractory_ms: float = 250.0
     # Anti-rebound guards: a rep may not close merely because velocity flips back
-    # to the starting direction. It must also have returned near the start angle.
-    return_frac: float = 0.35        # |angle| <= return_frac * |turnaround angle|
+    # to the starting direction. The return phase must have genuinely progressed
+    # (covered most of the turnaround excursion) before the base direction counts.
+    return_frac: float = 0.5         # |angle - turn_angle| >= return_frac * |turn_angle|
     min_turn_gap_ms: float = 150.0   # minimum time between turnaround and close
     close_debounce: int = 4          # consecutive base-direction samples to close
 
@@ -140,11 +141,18 @@ def detect_reps(t: np.ndarray, velocity_dps: np.ndarray, params: DetectorParams)
             peak_abs = abs(v)
             peak_index = i
 
-        # Phase A -> B on a real reversal of the initial direction.
+        # Phase A -> B on a real reversal of the initial direction. A reversal only
+        # counts once the outbound phase has actually accumulated excursion; a small
+        # opening lobe is treated as noise and the rep restarts in the new direction.
         if state == 1 and v * base_sign < -params.start_dps:
-            state = 2
-            turnaround = i
-            theta_turn = theta  # angle at the turnaround (the extremum reached)
+            if abs(theta) >= params.min_phase_deg:
+                state = 2
+                turnaround = i
+                theta_turn = theta  # angle at the turnaround (the extremum reached)
+            else:
+                base_sign = -base_sign
+                reset(i)
+                continue
 
         # Continuous reps close only when motion has returned to the starting
         # direction *and* the integrated angle is genuinely back near the start.
@@ -155,10 +163,13 @@ def detect_reps(t: np.ndarray, velocity_dps: np.ndarray, params: DetectorParams)
             else:
                 base_streak = 0
 
-            returned_position = abs(theta) <= params.return_frac * (abs(theta_turn) + 1e-6)
+            # The opposing phase must have genuinely progressed before a rep may
+            # close on a base-direction crossing. A rebound blip has barely moved
+            # the angle, so it is rejected here instead of splitting the rep.
+            returned_meaningfully = abs(theta - theta_turn) >= params.min_phase_deg
             enough_after_turn = (now - float(t[turnaround])) * 1000.0 >= params.min_turn_gap_ms
             if (base_streak >= params.close_debounce and enough_after_turn
-                    and returned_position):
+                    and returned_meaningfully):
                 emit(i)
                 reset(i)
                 continue

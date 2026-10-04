@@ -1,4 +1,4 @@
-.PHONY: install install-backend install-frontend backend frontend test test-backend build lint smoke smoke-pipeline smoke-gemini smoke-elevenlabs smoke-jev clean
+.PHONY: install install-backend install-frontend backend frontend test test-backend build lint smoke smoke-pipeline smoke-gemini smoke-elevenlabs smoke-jev firmware-build firmware-upload imu-monitor imu-record imu-plot clean
 
 install: install-backend install-frontend
 
@@ -40,6 +40,26 @@ smoke-elevenlabs:
 
 smoke-jev:
 	cd backend && uv run python ../scripts/smoke_jev.py
+
+# --- ESP32-C5 wearable firmware (requires PlatformIO) -----------------------
+firmware-build:
+	cd firmware/esp32-wearable && pio run
+
+firmware-upload:
+	cd firmware/esp32-wearable && pio run --target upload
+
+firmware-monitor:
+	cd firmware/esp32-wearable && pio device monitor
+
+# --- IMU over BLE (requires the wearable + bleak) ---------------------------
+imu-monitor:
+	cd backend && uv run python ../scripts/imu_monitor.py
+
+imu-record:
+	cd backend && uv run python ../scripts/imu_record.py --name $(NAME)
+
+imu-plot:
+	cd backend && uv run python ../scripts/imu_plot.py --file $(FILE)
 
 clean:
 	rm -rf backend/.pytest_cache frontend/dist

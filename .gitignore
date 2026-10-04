@@ -27,3 +27,11 @@ dist-ssr/
 # Generated audio / scratch
 *.mp3
 /scratch/
+
+# PlatformIO build artifacts
+firmware/**/.pio/
+.pio/
+
+# Raw IMU recordings (regenerate locally; do not commit sensor data by default)
+data/recordings/*
+!data/recordings/.gitkeep

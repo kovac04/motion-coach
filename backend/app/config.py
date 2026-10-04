@@ -42,7 +42,13 @@ class Settings(BaseSettings):
 
     elevenlabs_api_key: str = ""
     elevenlabs_voice_id: str = ""
-    elevenlabs_model_id: str = "eleven_turbo_v2_5"
+    elevenlabs_model_id: str = "eleven_v4_turbo"
+    elevenlabs_output_format: str = "mp3_44100_128"
+    elevenlabs_stability: float = 0.55
+    elevenlabs_similarity_boost: float = 0.80
+    elevenlabs_style: float = 0.15
+    elevenlabs_speaker_boost: bool = True
+    elevenlabs_speed: float = 1.0
 
     database_url: str = ""
 
@@ -83,6 +89,8 @@ class Settings(BaseSettings):
                 "mode": self.voice_provider,
                 "configured": bool(self.elevenlabs_api_key and self.elevenlabs_voice_id),
                 "model": self.elevenlabs_model_id or None,
+                "voice_id": self.elevenlabs_voice_id or None,
+                "output_format": self.elevenlabs_output_format,
             },
         }
 

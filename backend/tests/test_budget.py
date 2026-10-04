@@ -54,12 +54,14 @@ async def test_language_timeout_uses_template(monkeypatch):
     monkeypatch.setattr(pipeline.language_service, "generate", slow_generate)
     result = await pipeline.evaluate(scenarios.too_fast())
     assert result.coaching.provider == "fallback"
-    assert len(result.coaching.text.split()) <= 12
+    assert len(result.coaching.text.split()) <= 32
     assert result.timings_ms["coaching"] < 200
 
 
-def test_fallback_templates_within_word_budget():
-    # Guard: the deterministic templates stay within the 12-word budget.
+def test_fallback_templates_within_end_of_set_budget():
+    # End-of-set templates must be <=32 words and <=2 sentences.
+    import re
+
     from app.services.fallbacks import coaching_template
 
     for issue in PrimaryIssue:
@@ -69,4 +71,21 @@ def test_fallback_templates_within_word_budget():
                 severity=severity, should_speak=True, overall_quality=OverallQuality.FAIR,
             )
             text, _ = coaching_template(decision, "Bicep Curl")
-            assert len(text.split()) <= 12, f"{issue}/{severity}: {text!r}"
+            words = text.split()
+            sentences = [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s]
+            assert 15 <= len(words) <= 32, f"{issue}/{severity}: {len(words)} words: {text!r}"
+            assert len(sentences) <= 2, f"{issue}/{severity}: {len(sentences)} sentences: {text!r}"
+
+
+def test_enforce_budget_truncates_words_and_sentences():
+    from app.services.gemini import enforce_budget
+
+    long = ("one two three four five six seven eight nine ten eleven twelve thirteen "
+            "fourteen fifteen sixteen seventeen eighteen nineteen twenty twentyone "
+            "twentytwo twentythree twentyfour twentyfive twentysix twentyseven twentyeight "
+            "twentynine thirty thirtyone thirtytwo thirtythree thirtyfour thirtyfive. "
+            "Second sentence here. Third sentence here.")
+    out = enforce_budget(long)
+    assert len(out.split()) <= 32
+    assert out.count(".") <= 1  # at most 2 sentences -> at most 2 periods, but truncation may drop the 2nd
+    assert "Third sentence" not in out

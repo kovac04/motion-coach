@@ -64,9 +64,17 @@ Body: `SetMetrics`. Same response shape as above.
 
 Body: `{ "text": "..." }`.
 
-- `200` + `audio/mpeg` when ElevenLabs succeeds.
-- `502` + JSON `{ "detail": { "voice_provider": "browser", "message": "..." } }` when it
-  falls back — the frontend then uses browser `speechSynthesis`.
+- `200` + `audio/mpeg` when ElevenLabs succeeds. Response headers report exactly what was
+  used (never secrets): `X-TTS-Provider`, `X-TTS-Ms`, `X-TTS-Voice-Id`, `X-TTS-Model`,
+  `X-TTS-Format`, `X-TTS-Bytes`. Output format is `mp3_44100_128` (never a telephony
+  `ulaw_8000`/`alaw_8000` format).
+- `502` + JSON `{ "detail": { "voice_provider": "browser", "message": "...", "voice_id",
+  "model_id", "output_format" } }` when it falls back — the frontend then uses browser
+  `speechSynthesis` and labels `VOICE: BROWSER FALLBACK`.
+
+Voice settings are configurable: `ELEVENLABS_MODEL_ID`, `ELEVENLABS_OUTPUT_FORMAT`,
+`ELEVENLABS_STABILITY`, `ELEVENLABS_SIMILARITY_BOOST`, `ELEVENLABS_STYLE`,
+`ELEVENLABS_SPEAKER_BOOST`, `ELEVENLABS_SPEED`.
 
 ## GET /api/sensor/status
 

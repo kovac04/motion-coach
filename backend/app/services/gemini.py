@@ -32,12 +32,26 @@ class _GeminiCoaching(BaseModel):
 
 
 _SYSTEM_INSTRUCTION = (
-    "You are a concise movement coach. You receive a structured decision and a few "
-    "objective metrics. Produce ONE short coaching instruction: 4-9 words, hard maximum "
-    "12 words. Choose only the single highest-priority correction from the decision. "
-    "Speak directly to the athlete. No percentages, no numbers, no explanations, no "
-    "'based on', no multiple corrections, no motivational filler."
+    "You are a concise movement coach giving feedback after one completed set. Produce "
+    "ONE coaching message of 15-25 words (hard maximum 32 words, at most 2 sentences). "
+    "Sentence 1 says what happened; sentence 2 says what to do next. Choose ONE primary "
+    "coaching priority from the decision; mention a secondary observation only if it "
+    "explains the primary issue. Speak directly to the athlete. No percentages or numbers "
+    "unless unusually useful, no medical claims, no motivational filler."
 )
+
+MAX_WORDS = 32
+MAX_SENTENCES = 2
+
+
+def enforce_budget(text: str, max_words: int = MAX_WORDS, max_sentences: int = MAX_SENTENCES) -> str:
+    """Hard-enforce the coaching budget: at most `max_sentences` and `max_words`."""
+    import re
+
+    sentences = [s for s in re.split(r"(?<=[.!?])\s+", text.strip()) if s]
+    sentences = sentences[:max_sentences]
+    words = " ".join(sentences).split()
+    return " ".join(words[:max_words]).strip()
 
 
 def _prompt(decision: MovementDecision, metrics: RepMetrics | SetMetrics, exercise_id: str) -> str:
@@ -153,7 +167,7 @@ class LanguageService:
         if parsed is None:
             raise ValueError(f"Gemini returned no structured output ({last_error})")
         return CoachingResponse(
-            text=parsed.text,
+            text=enforce_budget(parsed.text),
             short_label=parsed.short_label,
             tone=_tone_for(decision),
             provider="gemini",

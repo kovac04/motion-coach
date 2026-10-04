@@ -8,7 +8,7 @@ import type {
   SensorStatus,
   SetMetrics,
 } from '../types'
-import { playCoaching, stopSpeaking, type VoiceUsed } from '../tts'
+import { playCoaching, stopSpeaking, type VoiceResult, type VoiceUsed } from '../tts'
 import { CoachPanel } from './CoachPanel'
 import { DecisionPanel } from './DecisionPanel'
 import { RepHistory } from './RepHistory'
@@ -89,6 +89,7 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
   const [latency, setLatency] = useState<Latency>({})
   const [providers, setProviders] = useState<{ decision: string; language: string } | null>(null)
   const [voiceUsed, setVoiceUsed] = useState<VoiceUsed | null>(null)
+  const [voiceMeta, setVoiceMeta] = useState<VoiceResult | null>(null)
   const [speaking, setSpeaking] = useState(false)
   const [autoSpeak, setAutoSpeak] = useState(true)
   const [showDebug, setShowDebug] = useState(false)
@@ -102,6 +103,7 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
       setSpeaking(true)
       const result = await playCoaching(text, voiceMode)
       setVoiceUsed(result.voice)
+      setVoiceMeta(result)
       setLatency((prev) => ({
         ...prev,
         elevenlabs: Math.round(result.ttsMs),
@@ -249,6 +251,11 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
             </span>
             {status && <span className="chip">{status.sample_rate_hz.toFixed(1)} Hz</span>}
             {status && <span className="chip">gaps {status.sequence_gaps}</span>}
+            {voiceMeta && (
+              <span className={`chip ${voiceMeta.voice === 'elevenlabs' ? 'live' : 'fallback'}`}>
+                VOICE: {voiceMeta.voice === 'elevenlabs' ? 'ELEVENLABS' : 'BROWSER FALLBACK'}
+              </span>
+            )}
           </div>
 
           {mode !== 'CALIBRATING' && (
@@ -333,7 +340,8 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
             <p className="notice mono">
               metrics {latency.metrics ?? '—'} ms · Jev {latency.jev ?? '—'} ms · Gemini {latency.gemini ?? '—'} ms
               <br />ElevenLabs {latency.elevenlabs ?? '—'} ms · total→audio {latency.total ?? '—'} ms
-              <br />providers: JEV={providers?.decision ?? '—'} · GEMINI={providers?.language ?? '—'} · voice {voiceUsed ?? '—'}
+              <br />providers: JEV={providers?.decision ?? '—'} · GEMINI={providers?.language ?? '—'}
+              <br />voice {voiceUsed ?? '—'} · id {voiceMeta?.voiceId ?? '—'} · model {voiceMeta?.modelId ?? '—'} · fmt {voiceMeta?.outputFormat ?? '—'} · {voiceMeta?.bytes ?? '—'} bytes
             </p>
           )}
         </div>

@@ -141,47 +141,49 @@ def evaluate_decision(metrics: RepMetrics | SetMetrics) -> MovementDecision:
 
 # --- Language templates -----------------------------------------------------
 
+# End-of-set coaching: 15-25 words preferred, hard max 32, at most 2 sentences.
+# Sentence 1 says what happened; sentence 2 says what to do next.
 _COACHING: dict[PrimaryIssue, dict[Severity, str]] = {
     PrimaryIssue.GOOD: {
-        Severity.NONE: "Good set. Keep that same rhythm.",
-        Severity.MILD: "Good set. Keep that same rhythm.",
-        Severity.MODERATE: "Good set. Stay smooth and controlled.",
-        Severity.MAJOR: "Good effort. Stay controlled.",
+        Severity.NONE: "Your tempo and range stayed consistent across the set. Keep that same rhythm on the next set.",
+        Severity.MILD: "Your tempo and range stayed consistent across the set. Keep that same rhythm on the next set.",
+        Severity.MODERATE: "Your movement held together well overall. Keep that same rhythm and range on the next set.",
+        Severity.MAJOR: "Your movement held together well overall. Keep that same rhythm and range on the next set.",
     },
     PrimaryIssue.TOO_FAST: {
-        Severity.MILD: "Ease off the speed slightly.",
-        Severity.MODERATE: "Slow down and control each rep.",
-        Severity.MAJOR: "Slow down and control every rep.",
+        Severity.MILD: "Your reps were slightly quicker than your baseline. Ease off the pace and keep each rep controlled.",
+        Severity.MODERATE: "Your reps sped up noticeably through the set. Slow the next set down and keep each rep controlled through the full range.",
+        Severity.MAJOR: "Your reps sped up noticeably through the set. Slow the next set down and keep each rep controlled through the full range.",
     },
     PrimaryIssue.TOO_SLOW: {
-        Severity.MILD: "Speed up slightly.",
-        Severity.MODERATE: "Speed up slightly while staying controlled.",
-        Severity.MAJOR: "Move faster and stay controlled.",
+        Severity.MILD: "Your reps were a little slower than your baseline. Pick up the pace slightly while staying smooth.",
+        Severity.MODERATE: "Your reps slowed down through the set. Increase the pace slightly and keep each rep smooth and controlled.",
+        Severity.MAJOR: "Your reps slowed down through the set. Increase the pace slightly and keep each rep smooth and controlled.",
     },
     PrimaryIssue.INSUFFICIENT_ROM: {
-        Severity.MILD: "Reach a little further.",
-        Severity.MODERATE: "Use a fuller range on each rep.",
-        Severity.MAJOR: "Complete the full range every rep.",
+        Severity.MILD: "Your range was slightly shorter than your baseline. Reach a little further on each rep.",
+        Severity.MODERATE: "Your range shortened as the set progressed. Focus on finishing each rep before reversing the movement.",
+        Severity.MAJOR: "Your range shortened as the set progressed. Focus on finishing each rep before reversing the movement.",
     },
     PrimaryIssue.EXCESSIVE_ROM: {
-        Severity.MILD: "Keep the range a bit tighter.",
-        Severity.MODERATE: "Match your reference range.",
-        Severity.MAJOR: "Reduce the range and stay controlled.",
+        Severity.MILD: "Your range ran a bit longer than your baseline. Keep the range a little tighter.",
+        Severity.MODERATE: "Your range ran longer than your baseline. Keep the range consistent and stay controlled through each rep.",
+        Severity.MAJOR: "Your range ran longer than your baseline. Keep the range consistent and stay controlled through each rep.",
     },
     PrimaryIssue.INCONSISTENT: {
-        Severity.MILD: "Keep each rep consistent.",
-        Severity.MODERATE: "Keep each rep at the same tempo.",
-        Severity.MAJOR: "Reset and match every rep.",
+        Severity.MILD: "Your reps varied slightly in tempo or range. Try to keep each rep close to the same rhythm.",
+        Severity.MODERATE: "Your tempo became less consistent across the set. Try to keep every rep closer to the same rhythm.",
+        Severity.MAJOR: "Your tempo became less consistent across the set. Try to keep every rep closer to the same rhythm.",
     },
     PrimaryIssue.UNSTABLE: {
-        Severity.MILD: "Stay steady through each rep.",
-        Severity.MODERATE: "Slow down and stay steady.",
-        Severity.MAJOR: "Control the movement.",
+        Severity.MILD: "The movement was a little unsteady in places. Stay smooth and controlled through each rep.",
+        Severity.MODERATE: "The movement became less steady through the set. Slow down and keep each rep smooth and controlled.",
+        Severity.MAJOR: "The movement became less steady through the set. Slow down and keep each rep smooth and controlled.",
     },
     PrimaryIssue.OTHER: {
-        Severity.MILD: "Keep the movement smooth.",
-        Severity.MODERATE: "Focus on clean, controlled reps.",
-        Severity.MAJOR: "Slow down and stay controlled.",
+        Severity.MILD: "The set was mostly solid with a small deviation. Keep the movement smooth and repeatable.",
+        Severity.MODERATE: "The movement drifted from your baseline. Slow down and match the same rhythm and range on the next set.",
+        Severity.MAJOR: "The movement drifted from your baseline. Slow down and match the same rhythm and range on the next set.",
     },
 }
 

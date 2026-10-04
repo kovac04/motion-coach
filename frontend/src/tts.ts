@@ -4,6 +4,10 @@ export interface VoiceResult {
   voice: VoiceUsed
   ttsMs: number // backend synthesis time (ElevenLabs)
   totalMs: number // fetch + playback-start
+  modelId?: string
+  outputFormat?: string
+  bytes?: number
+  voiceId?: string
 }
 
 let currentAudio: HTMLAudioElement | null = null
@@ -69,9 +73,14 @@ export async function playCoaching(text: string, voiceMode: string): Promise<Voi
     })
     if (res.ok) {
       const ttsMs = Number(res.headers.get('X-TTS-Ms') ?? '0')
+      const modelId = res.headers.get('X-TTS-Model') ?? undefined
+      const outputFormat = res.headers.get('X-TTS-Format') ?? undefined
+      const bytes = Number(res.headers.get('X-TTS-Bytes') ?? '0')
+      const voiceId = res.headers.get('X-TTS-Voice-Id') ?? undefined
       const blob = await res.blob()
       await playBlobUrl(URL.createObjectURL(blob))
-      return { voice: 'elevenlabs', ttsMs, totalMs: performance.now() - started }
+      return { voice: 'elevenlabs', ttsMs, totalMs: performance.now() - started,
+        modelId, outputFormat, bytes, voiceId }
     }
   } catch {
     // fall through to browser voice

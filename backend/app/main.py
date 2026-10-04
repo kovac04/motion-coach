@@ -9,8 +9,9 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import coaching, demo, health, sensor
+from app.routes import coaching, demo, health, motion, sensor
 from app.sensors import SensorRuntime
+from app.services.live_coach import LiveMotionService
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,6 +45,8 @@ app.state.sensor = SensorRuntime(
     buffer_seconds=_settings.sensor_buffer_seconds,
     retry_delay=_settings.sensor_retry_delay,
 )
+app.state.motion = LiveMotionService(_settings)
+app.state.sensor.subscribe(app.state.motion.on_sample)
 
 app.add_middleware(
     CORSMiddleware,
@@ -57,6 +60,7 @@ app.include_router(health.router)
 app.include_router(demo.router)
 app.include_router(coaching.router)
 app.include_router(sensor.router)
+app.include_router(motion.router)
 
 
 @app.middleware("http")

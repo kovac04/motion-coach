@@ -86,6 +86,23 @@ velocity, similarity) and writes a debug plot
 (`data/recordings/<name>-segments.png`) showing the projected signal, thresholds,
 and rep boundaries, so boundaries can be verified visually.
 
+## Live pipeline
+
+`LiveMotionService` subscribes to the single `SensorRuntime` BLE owner (no second
+connection). `LiveSetDetector` keeps a ~1 s pre-roll so rep 1 is preserved, runs
+the same segmentation on the live buffer, and declares the set complete after a
+configurable idle timeout (default 3 s). It then returns to WAITING.
+
+On a completed set the existing `CoachPipeline` runs unchanged:
+`SetMetrics -> Jev/mock -> MovementDecision -> Gemini/mock -> CoachingResponse`.
+Sets with too few valid reps are rejected (`SET_REJECTED`) instead of sending
+garbage to Jev. State and coaching are pushed over the existing WebSocket; the
+dashboard shows the state, rep count, decision, and speaks the cue.
+
+Calibration in the UI (`POST /api/motion/calibrate`) captures ~20 s of live
+samples, builds the profile from the reps performed, and saves it — so the live
+PCA axis/bias match the current mounting.
+
 ## Honest limitations
 
 - `rom_deg` is a relative rotation estimate, not joint angle.

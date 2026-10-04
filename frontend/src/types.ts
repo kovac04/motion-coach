@@ -126,6 +126,25 @@ export interface SensorStatus {
 // [host_timestamp, gyro_magnitude, accel_magnitude]
 export type SensorPoint = [number, number, number]
 
+export interface CoachingResult {
+  rejected: boolean
+  reason?: string
+  rep_count?: number
+  metrics?: unknown
+  decision?: MovementDecision
+  coaching?: CoachingResponse
+  timings_ms?: Record<string, number>
+}
+
+export interface MotionStatus {
+  state: string
+  rep_count: number
+  exercise_id: string
+  has_profile: boolean
+  available_profiles: string[]
+  last_evaluation: CoachingResult | null
+}
+
 export interface Health {
   status: string
   app_env: string

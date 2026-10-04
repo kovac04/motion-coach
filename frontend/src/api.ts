@@ -2,10 +2,21 @@ import type {
   EvaluationResult,
   ExerciseProfile,
   Health,
+  MotionStatus,
   RepMetrics,
   ScenarioSummary,
   SetMetrics,
 } from './types'
+
+export interface CalibrationResult {
+  ok: boolean
+  error?: string
+  exercise_id?: string
+  reps_used?: number
+  reference_duration_ms?: number
+  reference_excursion_deg?: number
+  noise_dps?: number
+}
 
 async function getJson<T>(url: string): Promise<T> {
   const res = await fetch(url)
@@ -44,4 +55,7 @@ export const api = {
   customSet: (controls: CustomSetControls) => postJson<SetMetrics>('/api/demo/custom', controls),
   evaluateSet: (metrics: SetMetrics) => postJson<EvaluationResult>('/api/evaluate/set', metrics),
   evaluateRep: (metrics: RepMetrics) => postJson<EvaluationResult>('/api/evaluate/rep', metrics),
+  motionStatus: () => getJson<MotionStatus>('/api/motion/status'),
+  calibrateMotion: (exerciseId: string, seconds = 20) =>
+    postJson<CalibrationResult>('/api/motion/calibrate', { exercise_id: exerciseId, seconds }),
 }

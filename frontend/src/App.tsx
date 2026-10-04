@@ -153,7 +153,7 @@ export default function App() {
 
       <div className="grid">
         <div className="stack">
-          <LiveSensor />
+          <LiveSensor voiceMode={voiceMode} autoSpeak={autoSpeak} />
 
           <div className="panel">
             <h2>Exercise</h2>

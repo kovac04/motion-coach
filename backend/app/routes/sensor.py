@@ -33,6 +33,7 @@ async def sensor_stream(websocket: WebSocket) -> None:
                 {
                     "type": "sensor",
                     "status": runtime.status(),
+                    "motion": websocket.app.state.motion.motion_status(),
                     "samples": [
                         [
                             round(sample.host_timestamp or 0.0, 3),

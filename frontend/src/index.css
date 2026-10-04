@@ -423,6 +423,28 @@ input[type='range'] {
   border: 1px solid var(--border);
   border-radius: 8px;
 }
+.motion-block {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.motion-coaching {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+.motion-coaching .decision-issue {
+  font-size: 24px;
+  margin: 0 0 4px;
+}
+.coach-text.small {
+  font-size: 17px;
+  margin-top: 6px;
+}
+.motion-rejected {
+  color: var(--warn);
+  margin-top: 10px;
+}
 
 /* Rep history */
 .rep-table {

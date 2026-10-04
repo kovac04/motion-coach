@@ -89,6 +89,28 @@ WebSocket. Pushes ~10×/second:
 
 `samples` is the last ~2.5 s of the bounded ring buffer, ready to render directly.
 
+## GET /api/motion/status
+
+Live set-detection state. `state` is `WAITING` | `ACTIVE` | `COMPLETE` |
+`NO_PROFILE`, plus `rep_count`, `has_profile`, `available_profiles`, and the latest
+`last_evaluation` (decision + coaching, or a rejection reason).
+
+## POST /api/motion/calibrate
+
+```json
+{ "exercise_id": "bicep_curl", "seconds": 20 }
+```
+
+Captures the live BLE stream for `seconds`, builds a calibration profile from the
+reps performed, saves `data/profiles/bicep_curl.json`, and reloads the detector.
+Returns `{ ok, reps_used, reference_duration_ms, reference_excursion_deg, noise_dps }`
+or `{ ok: false, error }`.
+
+## WS /api/sensor/stream (motion field)
+
+Each stream message also includes `motion` (same shape as `/api/motion/status`),
+so the dashboard can show SET ACTIVE / REP N / SET COMPLETE and the coaching cue.
+
 ## GET /api/exercises
 
 List exercise profiles.

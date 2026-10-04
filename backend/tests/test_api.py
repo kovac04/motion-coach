@@ -63,6 +63,23 @@ def test_sensor_status_offline():
     assert body["sample"] is None
 
 
+def test_motion_status():
+    response = client.get("/api/motion/status")
+    assert response.status_code == 200
+    body = response.json()
+    assert "state" in body
+    assert "rep_count" in body
+    assert "has_profile" in body
+
+
+def test_sensor_stream_includes_motion():
+    with client.websocket_connect("/api/sensor/stream") as websocket:
+        message = websocket.receive_json()
+        assert message["type"] == "sensor"
+        assert "motion" in message
+        assert "status" in message
+
+
 def test_custom_set_endpoint():
     response = client.post(
         "/api/demo/custom",

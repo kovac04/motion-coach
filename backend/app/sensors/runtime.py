@@ -14,6 +14,7 @@ import asyncio
 import logging
 import time
 from collections import deque
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 
@@ -81,6 +82,16 @@ class SensorRuntime:
         self._arrivals: deque[float] = deque(maxlen=self.max_rate_hz * 3)
         self._status = SensorStatus(device_name=self.device_name)
         self._task: asyncio.Task | None = None
+        self._subscribers: list[Callable[[ImuSample], None]] = []
+
+    def subscribe(self, callback: Callable[[ImuSample], None]) -> None:
+        """Register a per-sample consumer (e.g. the live set detector)."""
+        if callback not in self._subscribers:
+            self._subscribers.append(callback)
+
+    def unsubscribe(self, callback: Callable[[ImuSample], None]) -> None:
+        if callback in self._subscribers:
+            self._subscribers.remove(callback)
 
     # --- lifecycle ---------------------------------------------------------
     async def start(self) -> None:
@@ -128,6 +139,11 @@ class SensorRuntime:
         self._status.missing_samples = self._tracker.missing
         self._status.malformed = self._client.malformed
         self._status.sample_rate_hz = self._compute_rate()
+        for callback in list(self._subscribers):
+            try:
+                callback(sample)
+            except Exception:  # noqa: BLE001 - a consumer must not break acquisition
+                logger.exception("sample subscriber failed")
 
     def _compute_rate(self) -> float:
         now = time.monotonic()

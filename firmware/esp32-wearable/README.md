@@ -77,23 +77,57 @@ mv ~/.platformio/packages/tool-esptoolpy /tmp/tool-esptoolpy.bak 2>/dev/null || 
 cd firmware/esp32-wearable && pio run
 ```
 
+## Viewing serial output non-interactively
+
+`pio device monitor` refuses piped/redirected stdin. In a real terminal it is fine:
+
+```sh
+pio device monitor -p /dev/cu.usbmodem1101 -b 115200
+```
+
+For scripted capture (used during bring-up), read the port directly with the
+pyserial bundled in PlatformIO:
+
+```sh
+~/.local/share/uv/tools/platformio/bin/python - <<'PY'
+import serial, time
+s = serial.Serial("/dev/cu.usbmodem1101", 115200, timeout=0.2)
+s.setDTR(False); s.setRTS(True); time.sleep(0.15); s.setRTS(False)  # reset
+end = time.time() + 6
+while time.time() < end:
+    print(s.read(256).decode("utf-8", "replace"), end="")
+PY
+```
+
 ## Bring-up test procedure
 
 ### STAGE 2 — I2C / sensor only (USB serial)
 
-1. Wire per the table, connect USB-C, run `make firmware-upload`, then `make firmware-monitor`.
-2. Expect on boot:
+1. Wire per the table, connect USB-C, run `make firmware-upload`, then view the serial
+   output with the reader below (`pio device monitor` needs an interactive TTY).
+2. Expect on boot (observed values from the first working board):
    ```
-   I2C scan:
-     found device at 0x68
-   MPU OK (WHO_AM_I=0x68)
+   MotionCoach wearable starting
+   SDA=23 SCL=24
+   ...
+   I2C scan...
+   Found 0x68
+   Using SDA=23 SCL=24 @400kHz addr=0x68
+   MPU WHO_AM_I=0x70
+     (MPU6500-class part; register-compatible with MPU6050 for this burst)
+   MPU initialized
    BLE advertising as MotionCoach-IMU
-   Waiting for client | seq=0
+   addr=0x68 ax=9388 ay=680 az=-13688 gx=49 gy=162 gz=144 total=50 rate=50.0Hz ble=advertising
    ```
-3. **Stationary:** over ~1 s, one accelerometer axis should sit near ±16000
-   (~1 g = 16384 LSB) depending on orientation; the other two near 0; gyro near 0.
-4. **Move the sensor:** the six raw values should clearly change.
-5. If `WHO_AM_I` is not `0x68` or no device is found, see debugging below.
+   The firmware discovers the address (0x68 or 0x69; AD0 may be unconnected) and
+   accepts MPU6050 (0x68) or MPU6500/9250/9255-class `WHO_AM_I` values (0x70/0x71/0x73),
+   which share the same register map and 0x3B burst.
+3. **Stationary:** one accelerometer axis near ±16000 (~1 g = 16384 LSB) depending on
+   orientation; gyro near zero.
+4. **Move the sensor:** the raw values swing; fast shaking saturates the ±250 dps gyro
+   range (±32767), which is expected. Controlled reps will be far below saturation.
+5. If no device is found, the firmware automatically retries 100 kHz and swapped pins
+   and prints a line-level/drive/short diagnostic before halting.
 
 ### STAGE 3 — BLE streaming (Mac)
 

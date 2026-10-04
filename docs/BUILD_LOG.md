@@ -41,8 +41,14 @@
   adapted; provenance recorded in `firmware/esp32-wearable/README.md`). Pins verified
   from the installed XIAO_ESP32C5 Arduino variant (SDA=GPIO23/D4, SCL=GPIO24/D5), not
   guessed. Firmware builds (`firmware.bin`, 853,776 bytes). Python bleak client,
-  CSV recorder, and plotter added with 50 passing backend tests. Physical hardware
-  validation is pending (awaiting wiring).
+  CSV recorder, and plotter added with 50 passing backend tests.
+- Hardware transport validated on real hardware (XIAO ESP32-C5 + MPU6050 over I2C):
+  I2C address discovered at **0x68** (AD0 left unconnected), `WHO_AM_I=0x70`
+  (MPU6500-class, register-compatible), firmware streams at **50.0 Hz**, BLE advertises
+  as `MotionCoach-IMU`, Python/bleak connects and decodes 18-byte packets with
+  **0 sequence gaps and 0 malformed** packets, and accel/gyro values track physical
+  motion. Firmware gained I2C address auto-detection and wiring diagnostics during
+  bring-up (the first wiring attempt produced no I2C device; corrected wiring fixed it).
 
 ## Notes
 

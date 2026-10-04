@@ -137,6 +137,17 @@ MPU6050 --I2C--> XIAO ESP32-C5 --BLE notify--> Mac (backend/app/sensors)
 - Rep segmentation and calibration are **not built yet** — first we record real data,
   then derive thresholds from it.
 
+### Live sensor in the dashboard
+
+Set `SENSOR_ENABLED=true` in `.env` (and have the powered wearable in BLE range), then
+`make backend` + `make frontend`. The dashboard shows a **Live Sensor** panel: connection
+state, effective Hz, sequence gaps, current accel/gyro, and a small gyro/accel magnitude
+chart. The backend owns a single BLE connection (`SensorRuntime`) with automatic reconnect;
+a power-cycle of the wearable is recovered without restarting FastAPI.
+
+`GET /api/sensor/status` returns the live status as JSON; `WS /api/sensor/stream` pushes a
+~2.5 s window about 10×/second. Keep `SENSOR_ENABLED=false` for the offline demo and tests.
+
 The downstream metrics contract is unchanged: when segmentation exists it only needs to
 produce a valid `RepMetrics` / `SetMetrics` (`backend/app/models/metrics.py`) and POST it to
 `/api/evaluate/rep` or `/api/evaluate/set`.

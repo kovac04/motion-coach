@@ -49,6 +49,15 @@
   **0 sequence gaps and 0 malformed** packets, and accel/gyro values track physical
   motion. Firmware gained I2C address auto-detection and wiring diagnostics during
   bring-up (the first wiring attempt produced no I2C device; corrected wiring fixed it).
+- Untethered operation verified: ESP32 on a USB power bank, Mac communicating only over BLE
+  (~50 Hz, 0 gaps). `imu-monitor` now runs until Ctrl-C with clean shutdown and automatic
+  rescan/reconnect. Added a single-owner `SensorRuntime` (bounded ring buffer, auto-reconnect)
+  exposed over `GET /api/sensor/status` and `WS /api/sensor/stream`, plus a live "Live Sensor"
+  dashboard panel. Backend failure test passed: power-cycling the wearable produced a
+  disconnect and automatic reconnect (`connections` 1 → 2) without restarting FastAPI.
+- Sensor ranges widened to ±4 g / ±1000 dps (from ±2 g / ±250 dps) to reduce clipping;
+  firmware and Python scaling constants updated together and flashed. Gyro no longer clips;
+  accel clipped 2 of 707 samples only during maximal fast swings (ordinary reps unaffected).
 
 ## Notes
 

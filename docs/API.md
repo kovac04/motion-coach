@@ -68,6 +68,27 @@ Body: `{ "text": "..." }`.
 - `502` + JSON `{ "detail": { "voice_provider": "browser", "message": "..." } }` when it
   falls back — the frontend then uses browser `speechSynthesis`.
 
+## GET /api/sensor/status
+
+Live IMU status (no secrets). `connected`, `device_name`, `address`, `sample_rate_hz`,
+`sequence_gaps`, `missing_samples`, `malformed`, `connections`, `last_error`, and the latest
+`sample` (raw ax..gz plus accel/gyro magnitude). Works even when `SENSOR_ENABLED=false`
+(returns `connected: false`).
+
+## WS /api/sensor/stream
+
+WebSocket. Pushes ~10×/second:
+
+```json
+{
+  "type": "sensor",
+  "status": { "...": "same shape as /api/sensor/status" },
+  "samples": [[host_timestamp, gyro_magnitude, accel_magnitude], "..."]
+}
+```
+
+`samples` is the last ~2.5 s of the bounded ring buffer, ready to render directly.
+
 ## GET /api/exercises
 
 List exercise profiles.

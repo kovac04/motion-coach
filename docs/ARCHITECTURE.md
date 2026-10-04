@@ -13,7 +13,12 @@ MPU6050 (wrist)
         ↓ I2C  (SDA=D4/GPIO23, SCL=D5/GPIO24, addr 0x68)
    XIAO ESP32-C5          firmware/esp32-wearable
         ↓ BLE notify (18-byte little-endian packets, ~50 Hz)
-   Mac / Python           backend/app/sensors (bleak)
+   Mac / Python
+        ├─ CLI tools: backend/app/sensors + scripts/imu_{monitor,record,plot}.py
+        └─ FastAPI: SensorRuntime (single BLE owner, auto-reconnect)
+                    ↓ bounded ring buffer (last ~6 s)
+                    ↓ WebSocket /api/sensor/stream + GET /api/sensor/status
+                    React "Live Sensor" panel (status + small magnitude chart)
         ↓
    continuous sample log  data/recordings/*.csv
         ↓
@@ -22,20 +27,28 @@ MPU6050 (wrist)
    RepMetrics / SetMetrics
 ```
 
-The acquisition + transport path is implemented; it produces raw samples only.
-Rep detection, calibration, and metric extraction are deliberately not built
-until real recordings exist. When built, they produce the exact Pydantic models
-in `backend/app/models/metrics.py`, and nothing downstream changes.
+The acquisition + transport + live-display path is implemented; it produces raw
+samples only. Rep detection, calibration, and metric extraction are deliberately
+not built until real recordings exist. When built, they produce the exact Pydantic
+models in `backend/app/models/metrics.py`, and nothing downstream changes.
 
 Packet (18 bytes, little-endian; Python `struct.unpack("<HIhhhhhh", data)`):
 `uint16 sequence | uint32 timestamp_ms | int16 ax,ay,az,gx,gy,gz`.
 
+Sensor ranges (firmware and `packet.py` must stay in sync):
+`ACCEL_CONFIG=0x08` (±4 g, 8192 LSB/g), `GYRO_CONFIG=0x10` (±1000 dps, 32.8 LSB/dps).
+
 Files:
 - `firmware/esp32-wearable/` — ESP32-C5 firmware (MPU6050 + BLE peripheral)
 - `backend/app/sensors/packet.py` — wire format, `ImuSample`, sequence-gap tracking
-- `backend/app/sensors/ble_client.py` — bleak central, async sample stream
+- `backend/app/sensors/ble_client.py` — bleak central, async stream, reconnecting stream
+- `backend/app/sensors/runtime.py` — `SensorRuntime`: single BLE owner + ring buffer + status
 - `backend/app/sensors/recorder.py` — CSV recording
+- `backend/app/routes/sensor.py` — `/api/sensor/status`, WebSocket `/api/sensor/stream`
 - `scripts/imu_monitor.py`, `scripts/imu_record.py`, `scripts/imu_plot.py`
+
+Only one component per process owns the BLE connection. The CLI tools and the
+FastAPI runtime are separate processes, so run one at a time.
 
 The STM32 is a reference/fallback only, not in the runtime path.
 

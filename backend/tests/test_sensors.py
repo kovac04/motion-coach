@@ -85,6 +85,18 @@ def test_sequence_tracker_handles_wraparound():
 
 
 @pytest.mark.asyncio
+async def test_runtime_ring_buffer_is_bounded():
+    from app.sensors.runtime import SensorRuntime
+
+    runtime = SensorRuntime(buffer_seconds=1.0, max_rate_hz=10)  # capacity 10
+    for i in range(500):
+        runtime._on_sample(ImuSample(i, i, 1, 2, 3, 4, 5, 6, host_timestamp=float(i)))
+    assert len(runtime._samples) <= 10
+    assert len(runtime._arrivals) <= 30
+    assert runtime.status()["sample"] is not None
+
+
+@pytest.mark.asyncio
 async def test_recorder_writes_csv(tmp_path):
     async def fake_stream():
         for i in range(5):

@@ -8,6 +8,12 @@ paid boundary.
 
 ## SENSOR PIPELINE — ACQUISITION REAL, SEGMENTATION NOT YET
 
+Frozen transport chain (do not change without a real motion-analysis reason):
+
+```
+IMU -> ESP32-C5 -> BLE 50 Hz -> SensorRuntime -> ring buffer -> WebSocket -> React
+```
+
 ```
 MPU6050 (wrist)
         ↓ I2C  (SDA=D4/GPIO23, SCL=D5/GPIO24, addr 0x68)

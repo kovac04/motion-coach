@@ -47,17 +47,32 @@ async def record_stream(
     count = 0
     start = time.monotonic()
 
+    # Pump the stream from a background task. This keeps the async generator
+    # (including its BLE scan/connect phase) from being cancelled by the
+    # consumer's short wait, while still letting Ctrl-C stop promptly.
+    queue: asyncio.Queue[ImuSample | None] = asyncio.Queue(maxsize=4096)
+
+    async def pump() -> None:
+        try:
+            async for sample in stream:
+                await queue.put(sample)
+        finally:
+            await queue.put(None)  # sentinel: stream ended
+
+    pump_task = asyncio.create_task(pump())
+
     with path.open("w", newline="") as csv_file:
         writer = csv.writer(csv_file)
         writer.writerow(CSV_HEADER)
-        iterator = stream.__aiter__()
         try:
             while not stop_event.is_set():
                 try:
-                    sample = await asyncio.wait_for(iterator.__anext__(), timeout=1.0)
+                    sample = await asyncio.wait_for(queue.get(), timeout=0.5)
                 except asyncio.TimeoutError:
+                    if pump_task.done():
+                        break
                     continue
-                except StopAsyncIteration:
+                if sample is None:
                     break
                 tracker.observe(sample.sequence)
                 writer.writerow(
@@ -78,6 +93,11 @@ async def record_stream(
                     csv_file.flush()
         finally:
             csv_file.flush()
+            pump_task.cancel()
+            try:
+                await pump_task
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001 - teardown
+                pass
 
     duration = time.monotonic() - start
     return RecordingStats(

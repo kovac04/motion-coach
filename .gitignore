@@ -35,3 +35,6 @@ firmware/**/.pio/
 # Raw IMU recordings (regenerate locally; do not commit sensor data by default)
 data/recordings/*
 !data/recordings/.gitkeep
+
+# Derived calibration profiles (built locally from recordings)
+data/profiles/

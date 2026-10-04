@@ -99,6 +99,9 @@ make imu-monitor                 # live ~50 Hz diagnostics
 make imu-record NAME=good-01     # record to data/recordings/good-01.csv (Ctrl-C to stop)
 make imu-plot FILE=data/recordings/good-01.csv
 make imu-analyze FILE=data/recordings/good-01.csv
+make imu-calibrate                          # build data/profiles/bicep_curl.json
+make imu-segment FILE=data/recordings/curl-good-01.csv   # detect reps + debug plot
+make imu-segment ALL=1                      # run across all curl recordings
 ```
 
 Recording protocol and inspection workflow: `docs/DATA_COLLECTION.md`.
@@ -159,6 +162,7 @@ produce a valid `RepMetrics` / `SetMetrics` (`backend/app/models/metrics.py`) an
 
 - `docs/ARCHITECTURE.md` — layers, boundaries, metric conventions, sensor boundary
 - `docs/DATA_COLLECTION.md` — how to record and inspect real motion data
+- `docs/MOTION.md` — rep detection, PCA projection, calibration, metrics
 - `docs/API.md` — HTTP endpoints
 - `docs/JEV_PROVIDER.md` — what must be verified before the real Jev adapter
 - `docs/BUILD_LOG.md` — provenance / timestamps

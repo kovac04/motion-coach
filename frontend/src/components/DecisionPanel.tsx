@@ -5,13 +5,19 @@ interface Props {
 }
 
 export function DecisionPanel({ decision }: Props) {
-  const issueLabel = decision.primary_issue.replaceAll('_', ' ')
+  const isGood = decision.primary_issue === 'GOOD'
+  const issueLabel = isGood ? 'Good set' : decision.primary_issue.replaceAll('_', ' ')
   const alternatives = Object.entries(decision.alternatives).sort((a, b) => b[1] - a[1])
 
   return (
     <div className="panel">
       <h2>Decision</h2>
       <div className={`decision-issue severity-${decision.severity}`}>{issueLabel}</div>
+      {isGood && (
+        <div className="meta-line" style={{ color: 'var(--good)' }}>
+          No correction needed — spoken coaching is skipped.
+        </div>
+      )}
       <div className="meta-line">
         severity {decision.severity} · priority {decision.coaching_priority} ·{' '}
         {decision.overall_quality}

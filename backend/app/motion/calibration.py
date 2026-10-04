@@ -123,7 +123,9 @@ def build_profile(exercise_id: str, recordings: list[list[dict[str, float]]],
 
     for index, samples in enumerate(recordings):
         t, g = _as_matrix(samples)
-        rest = estimate_rest(t, g)
+        # Short window: recordings (especially live calibration) may only pause
+        # briefly, so a 1 s window can miss the true rest and inflate noise.
+        rest = estimate_rest(t, g, window_s=0.5, step_s=0.1)
         axis, frac = pca_axis(g, rest.bias, rest.noise_dps)
         t, velocity = _project(samples, rest, axis)
         params = bootstrap_params(rest.noise_dps)

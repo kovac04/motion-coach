@@ -58,6 +58,16 @@
 - Sensor ranges widened to ±4 g / ±1000 dps (from ±2 g / ±250 dps) to reduce clipping;
   firmware and Python scaling constants updated together and flashed. Gyro no longer clips;
   accel clipped 2 of 707 samples only during maximal fast swings (ordinary reps unaffected).
+- Motion analysis pipeline built and validated offline on the 9 real curl recordings:
+  PCA projection of the gyro (PC1 explains 91–98%), robust quiet-window resting baseline,
+  and a deterministic rep state machine. Each recording (good/fast/slow/short-rom/mixed)
+  segments into exactly 5 reps with sensible boundaries, and calibration yields a reference
+  waveform whose similarity is 0.90–0.98 for clean sets and 0.72 for the mixed set.
+- Live pipeline verified end-to-end on real hardware: a live calibration produced a clean
+  profile (noise 1.3 dps, PC1 87%), a live set was detected automatically (5 reps,
+  similarity mean 0.86, consistency 0.89, no manual clicks), and the completed set ran
+  through the existing Jev (INCONSISTENT/MODERATE, provider jev) → Gemini coaching cue →
+  ElevenLabs speech (`audio/mpeg`, 77 KB), then returned to WAITING.
 
 ## Notes
 

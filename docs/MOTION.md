@@ -48,8 +48,19 @@ directions must contribute), start/stop hysteresis, start/stop debounce, and a
 refractory interval. Thresholds are derived from resting noise and the
 calibration reference, not hard-coded constants.
 
-The "return to initial direction" branch is what lets **continuous reps** split
-at the bottom turnaround instead of merging when there is no full stop.
+For continuous reps (no full stop), the rep closes when motion returns to the
+starting direction **and** the integrated angle is genuinely back near the start
+(`|angle| <= 0.35 * |turnaround angle|`), sustained for a debounce, and at least
+`min_turn_gap_ms` after the turnaround. This is what prevents a brief rebound /
+momentum blip from splitting one physical rep into several — a naive
+"velocity changed sign" rule over-segments fast reps. `min_turn_gap_ms` is derived
+from the reference tempo (≈8% of reference duration), not a raw constant.
+
+Debugging: set `DEBUG_SAVE_LIVE_SETS=true` to persist each finalized set to
+`data/debug/live-set-*.csv` (raw gyro + projected/filtered velocity) with a JSON
+sidecar (axis, bias, thresholds, rep boundaries), then
+`make live-debug FILE=data/debug/live-set-….csv` to replay the exact trace and plot
+the signal with start/turnaround/end markers.
 
 ## Angular excursion (ROM proxy)
 

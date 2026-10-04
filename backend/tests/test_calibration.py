@@ -41,7 +41,9 @@ def _feed(svc, start_index, t):
     return idx, t
 
 
-def test_calibration_phases_and_clean_baseline():
+def test_calibration_phases_and_clean_baseline(monkeypatch, tmp_path):
+    # Never touch the real data/profiles directory from tests.
+    monkeypatch.setattr("app.motion.profiles.PROFILE_DIR", tmp_path)
     settings = Settings(decision_provider="mock", language_provider="mock")
     service = LiveMotionService(settings)
     service.start_calibration()
@@ -54,7 +56,8 @@ def test_calibration_phases_and_clean_baseline():
     assert result["noise_dps"] < 10.0
 
 
-def test_calibration_timeout_without_still():
+def test_calibration_timeout_without_still(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.motion.profiles.PROFILE_DIR", tmp_path)
     settings = Settings(decision_provider="mock", language_provider="mock")
     service = LiveMotionService(settings)
     service.start_calibration()

@@ -158,6 +158,8 @@ def build_profile(exercise_id: str, recordings: list[list[dict[str, float]]],
     params = bootstrap_params(live_noise if live_noise else 2.0)
     params.min_excursion_deg = max(20.0, 0.35 * reference_excursion)
     params.min_phase_deg = max(8.0, 0.25 * reference_excursion)
+    # Anti-rebound gap derived from the reference tempo rather than a raw constant.
+    params.min_turn_gap_ms = max(100.0, 0.08 * reference_duration)
 
     return CalibrationProfile(
         exercise_id=exercise_id,

@@ -116,6 +116,24 @@ def test_detect_reps_counts_cycles():
     assert len(spans) == 5
 
 
+def test_detect_reps_does_not_split_on_rebound():
+    # One physical rep whose return phase contains a brief rebound that flips the
+    # velocity sign back to the starting direction. A naive "returned to initial
+    # direction" rule splits this into multiple reps; the position + debounce +
+    # min-turn-gap guards must keep it as one.
+    dt = 0.02
+    t = np.arange(0, 5, dt)
+    v = np.zeros_like(t)
+    v[50:75] = 150.0     # outbound
+    v[75:83] = -150.0    # return begins
+    v[83:86] = 80.0      # rebound blip (sign flips back, above start threshold)
+    v[86:112] = -150.0   # return continues
+    v[112:135] = 150.0   # next lift brings angle back to start -> close
+    params = DetectorParams(start_dps=25, stop_dps=10, min_excursion_deg=20, min_phase_deg=8)
+    spans = detect_reps(t, v, params)
+    assert len(spans) == 1
+
+
 def test_detect_reps_rejects_tiny_excursion():
     dt = 0.02
     t = np.arange(0, 4, dt)

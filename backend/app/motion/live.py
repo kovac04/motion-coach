@@ -29,6 +29,11 @@ class CompletedSet:
     rep_count: int
     rejected: bool
     reason: str = ""
+    # Debug signal (for persisting / offline replay)
+    t: np.ndarray | None = None
+    gyro_raw: np.ndarray | None = None
+    velocity_raw_dps: np.ndarray | None = None
+    velocity_filtered_dps: np.ndarray | None = None
 
 
 class LiveSetDetector:
@@ -88,13 +93,18 @@ class LiveSetDetector:
         return [stamp if stamp is not None else time.monotonic(),
                 sample.gx, sample.gy, sample.gz]
 
-    def _velocity(self, rows: list[list[float]]) -> tuple[np.ndarray, np.ndarray]:
+    def _project(self, rows: list[list[float]]):
         t = np.asarray([r[0] for r in rows], dtype=float)
         t = t - t[0]
         g = np.asarray([[r[1], r[2], r[3]] for r in rows], dtype=float)
         bias = np.asarray(self.profile.bias, dtype=float)
         axis = np.asarray(self.profile.axis, dtype=float)
-        return t, lowpass(project(g, bias, axis), 5)
+        raw = project(g, bias, axis)
+        return t, g, raw, lowpass(raw, 5)
+
+    def _velocity(self, rows: list[list[float]]) -> tuple[np.ndarray, np.ndarray]:
+        t, _, _, filtered = self._project(rows)
+        return t, filtered
 
     def update(self, sample) -> CompletedSet | None:
         """Feed one sample. Returns a CompletedSet only when a set auto-finishes."""
@@ -119,9 +129,9 @@ class LiveSetDetector:
         tail = velocity[-window:]
         moving = bool(len(tail)) and float(np.max(np.abs(tail))) > self.params.start_dps
         if not moving and self.rep_count >= 1:
-            return self._finalize(t, velocity, spans)
+            return self._finalize(spans)
         if now - self._set_start > self.max_set_s:
-            return self._finalize(t, velocity, spans)
+            return self._finalize(spans)
         return None
 
     def finish_set(self) -> CompletedSet | None:
@@ -132,9 +142,10 @@ class LiveSetDetector:
         t, velocity = self._velocity(self._active)
         spans = detect_reps(t, velocity, self.params)
         self.rep_count = len(spans)
-        return self._finalize(t, velocity, spans)
+        return self._finalize(spans)
 
-    def _finalize(self, t, velocity, spans) -> CompletedSet:
+    def _finalize(self, spans) -> CompletedSet:
+        t, g, raw, velocity = self._project(self._active)
         projected = ProjectedRecording(
             t=t,
             velocity_dps=velocity,
@@ -150,6 +161,7 @@ class LiveSetDetector:
             metrics=metrics, spans=spans, rep_count=len(reps),
             rejected=rejected,
             reason="" if not rejected else f"insufficient valid reps ({len(reps)})",
+            t=t, gyro_raw=g, velocity_raw_dps=raw, velocity_filtered_dps=velocity,
         )
         self.reset()
         return completed

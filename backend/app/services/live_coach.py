@@ -22,6 +22,7 @@ import numpy as np
 
 from app.config import Settings
 from app.motion.calibration import CalibrationProfile, build_profile
+from app.motion.debug import save_live_set
 from app.motion.live import CompletedSet, LiveSetDetector
 from app.motion.pipeline import project_samples
 from app.motion.profiles import list_profiles, load_profile, save_profile
@@ -216,11 +217,22 @@ class LiveMotionService:
         except Exception:  # noqa: BLE001
             return 0
 
+    def _maybe_save_debug(self, completed: CompletedSet) -> None:
+        if not self.settings.debug_save_live_sets or self.profile is None:
+            return
+        try:
+            paths = save_live_set(completed, self.profile,
+                                  tag="rejected" if completed.rejected else "set")
+            logger.info("DEBUG: saved live set trace -> %s", paths["csv"])
+        except Exception:  # noqa: BLE001 - debug must never break the pipeline
+            logger.exception("debug save failed")
+
     def _schedule_completed(self, completed: CompletedSet) -> None:
         import asyncio
 
         self.last_completed = completed
         if completed.rejected:
+            self._maybe_save_debug(completed)
             self.last_evaluation = {
                 "rejected": True, "reason": completed.reason,
                 "rep_count": completed.rep_count, "metrics": completed.metrics.model_dump(),
@@ -233,6 +245,7 @@ class LiveMotionService:
     # --- pipeline ----------------------------------------------------------
     async def _handle_completed(self, completed: CompletedSet) -> dict:
         metrics = completed.metrics
+        self._maybe_save_debug(completed)
         logger.info(
             "LIVE SET: source=live rep_count=%d durations=%s duration_ratios=%s "
             "rom_ratios=%s similarities=%s consistency=%s",

@@ -1,4 +1,4 @@
-.PHONY: install install-backend install-frontend backend frontend test test-backend build lint smoke smoke-pipeline smoke-gemini smoke-elevenlabs smoke-jev firmware-build firmware-upload imu-monitor imu-record imu-plot imu-analyze imu-calibrate imu-segment clean
+.PHONY: install install-backend install-frontend backend frontend test test-backend build lint smoke smoke-pipeline smoke-gemini smoke-elevenlabs smoke-jev firmware-build firmware-upload imu-monitor imu-record imu-plot imu-analyze imu-calibrate imu-segment live-debug clean
 
 install: install-backend install-frontend
 
@@ -69,6 +69,9 @@ imu-calibrate:
 
 imu-segment:
 	cd backend && uv run python ../scripts/imu_segment.py $(if $(FILE),--file $(FILE),) $(if $(ALL),--all,)
+
+live-debug:
+	cd backend && uv run python ../scripts/live_debug.py --file $(FILE)
 
 clean:
 	rm -rf backend/.pytest_cache frontend/dist

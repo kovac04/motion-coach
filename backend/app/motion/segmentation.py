@@ -25,6 +25,11 @@ class DetectorParams:
     start_debounce: int = 2
     stop_debounce: int = 5
     refractory_ms: float = 250.0
+    # Anti-rebound guards: a rep may not close merely because velocity flips back
+    # to the starting direction. It must also have returned near the start angle.
+    return_frac: float = 0.35        # |angle| <= return_frac * |turnaround angle|
+    min_turn_gap_ms: float = 150.0   # minimum time between turnaround and close
+    close_debounce: int = 4          # consecutive base-direction samples to close
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -70,9 +75,11 @@ def detect_reps(t: np.ndarray, velocity_dps: np.ndarray, params: DetectorParams)
     state = 0  # 0 idle, 1 phase A, 2 phase B
     start = turnaround = peak_index = 0
     theta = theta_min = theta_max = 0.0
+    theta_turn = 0.0
     peak_abs = 0.0
     base_sign = 0
     above = below = 0
+    base_streak = 0
     refractory_until = -1e9
 
     def emit(end_index: int) -> None:
@@ -99,12 +106,15 @@ def detect_reps(t: np.ndarray, velocity_dps: np.ndarray, params: DetectorParams)
             )
 
     def reset(i: int) -> None:
-        nonlocal state, start, turnaround, peak_index, theta, theta_min, theta_max, peak_abs, above, below
+        nonlocal state, start, turnaround, peak_index, theta, theta_min, theta_max
+        nonlocal theta_turn, peak_abs, above, below, base_streak
         state = 1
         start = turnaround = peak_index = i
         theta = theta_min = theta_max = 0.0
+        theta_turn = 0.0
         peak_abs = abs(float(velocity_dps[i]))
         above = below = 0
+        base_streak = 0
 
     for i in range(n):
         v = float(velocity_dps[i])
@@ -134,13 +144,24 @@ def detect_reps(t: np.ndarray, velocity_dps: np.ndarray, params: DetectorParams)
         if state == 1 and v * base_sign < -params.start_dps:
             state = 2
             turnaround = i
+            theta_turn = theta  # angle at the turnaround (the extremum reached)
 
-        # Continuous reps: when motion returns to the initial direction, the rep
-        # is complete and the next rep begins immediately.
-        if state == 2 and v * base_sign > params.start_dps:
-            emit(i)
-            reset(i)
-            continue
+        # Continuous reps close only when motion has returned to the starting
+        # direction *and* the integrated angle is genuinely back near the start.
+        # This rejects brief rebounds that merely change velocity sign.
+        if state == 2:
+            if v * base_sign > params.start_dps:
+                base_streak += 1
+            else:
+                base_streak = 0
+
+            returned_position = abs(theta) <= params.return_frac * (abs(theta_turn) + 1e-6)
+            enough_after_turn = (now - float(t[turnaround])) * 1000.0 >= params.min_turn_gap_ms
+            if (base_streak >= params.close_debounce and enough_after_turn
+                    and returned_position):
+                emit(i)
+                reset(i)
+                continue
 
         if abs(v) < params.stop_dps:
             below += 1

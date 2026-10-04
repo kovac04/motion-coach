@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     sensor_buffer_seconds: float = 6.0
     sensor_retry_delay: float = 2.0
 
+    # Persist every finalized live set to data/debug/ for offline diagnosis.
+    debug_save_live_sets: bool = False
+
     # Timeouts (seconds) for paid providers.
     provider_connect_timeout: float = 5.0
     provider_request_timeout: float = 20.0

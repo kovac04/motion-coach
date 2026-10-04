@@ -38,3 +38,6 @@ data/recordings/*
 
 # Derived calibration profiles (built locally from recordings)
 data/profiles/
+
+# Live-set debug captures
+data/debug/

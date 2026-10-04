@@ -88,6 +88,18 @@ make smoke-elevenlabs # one real ElevenLabs request (needs key + voice id)
 make smoke-jev        # gated until Jev contract verified (see docs/JEV_PROVIDER.md)
 ```
 
+```bash
+# ESP32-C5 wearable firmware (PlatformIO)
+make firmware-build   # compile
+make firmware-upload  # flash over USB-C
+make firmware-monitor # 115200 serial monitor
+
+# IMU over BLE (wearable must be powered and advertising)
+make imu-monitor                 # live ~50 Hz diagnostics
+make imu-record NAME=good-01     # record to data/recordings/good-01.csv
+make imu-plot FILE=data/recordings/good-01.csv
+```
+
 Smoke tests never run during `pytest` and never print keys.
 
 ## Real-provider setup order
@@ -105,17 +117,29 @@ frontend or Vite env.
 ## Tests
 
 ```bash
-make test-backend   # 36 tests: models, scenarios, fallbacks, providers, API, pipeline
+make test-backend   # 50 tests: models, scenarios, providers, API, pipeline, BLE packets/recorder
 ```
 
-The entire application must work with zero API keys — that is enforced by tests.
+The entire application must work with zero API keys and without BLE hardware — enforced by
+tests. Packet decoding and CSV recording are pure and hardware-independent.
 
-## Sensor integration boundary
+## Hardware / sensor pipeline
 
-Hardware/signal-processing code only needs to produce a valid `RepMetrics` or `SetMetrics`
-(`backend/app/models/metrics.py`) and POST it to `/api/evaluate/rep` or `/api/evaluate/set`.
-No architectural change is required. The metrics contract and conventions are documented in
-`docs/ARCHITECTURE.md`.
+The wearable is a single XIAO ESP32-C5 reading an MPU6050 directly and streaming
+18-byte packets over BLE:
+
+```
+MPU6050 --I2C--> XIAO ESP32-C5 --BLE notify--> Mac (backend/app/sensors)
+```
+
+- Firmware + wiring + bring-up: `firmware/esp32-wearable/README.md`
+- SDA=`D4`/GPIO23, SCL=`D5`/GPIO24, sensor address `0x68`
+- Rep segmentation and calibration are **not built yet** — first we record real data,
+  then derive thresholds from it.
+
+The downstream metrics contract is unchanged: when segmentation exists it only needs to
+produce a valid `RepMetrics` / `SetMetrics` (`backend/app/models/metrics.py`) and POST it to
+`/api/evaluate/rep` or `/api/evaluate/set`.
 
 ## Docs
 

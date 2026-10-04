@@ -6,27 +6,43 @@ Deterministic code measures movement, a bounded decision model classifies it, a 
 model phrases one cue, and a TTS model speaks it — with a deterministic fallback at every
 paid boundary.
 
-## RAW IMU PIPELINE — NOT BUILT YET
+## SENSOR PIPELINE — ACQUISITION REAL, SEGMENTATION NOT YET
 
 ```
-MPU-6050 / IMU on wrist
+MPU6050 (wrist)
+        ↓ I2C  (SDA=D4/GPIO23, SCL=D5/GPIO24, addr 0x68)
+   XIAO ESP32-C5          firmware/esp32-wearable
+        ↓ BLE notify (18-byte little-endian packets, ~50 Hz)
+   Mac / Python           backend/app/sensors (bleak)
         ↓
-   STM32 / ESP32
+   continuous sample log  data/recordings/*.csv
         ↓
-   transport (USB serial / BLE)
-        ↓
-   Python signal processing      <-- future work
+   rep segmentation       <-- NOT BUILT YET (needs real data first)
         ↓
    RepMetrics / SetMetrics
 ```
 
-None of the above exists in this repo. It plugs in later by producing the exact Pydantic
-models in `backend/app/models/metrics.py`. Nothing downstream changes.
+The acquisition + transport path is implemented; it produces raw samples only.
+Rep detection, calibration, and metric extraction are deliberately not built
+until real recordings exist. When built, they produce the exact Pydantic models
+in `backend/app/models/metrics.py`, and nothing downstream changes.
 
-## CURRENT SYSTEM (this repo)
+Packet (18 bytes, little-endian; Python `struct.unpack("<HIhhhhhh", data)`):
+`uint16 sequence | uint32 timestamp_ms | int16 ax,ay,az,gx,gy,gz`.
+
+Files:
+- `firmware/esp32-wearable/` — ESP32-C5 firmware (MPU6050 + BLE peripheral)
+- `backend/app/sensors/packet.py` — wire format, `ImuSample`, sequence-gap tracking
+- `backend/app/sensors/ble_client.py` — bleak central, async sample stream
+- `backend/app/sensors/recorder.py` — CSV recording
+- `scripts/imu_monitor.py`, `scripts/imu_record.py`, `scripts/imu_plot.py`
+
+The STM32 is a reference/fallback only, not in the runtime path.
+
+## APPLICATION PIPELINE (this repo)
 
 ```
-RepMetrics / SetMetrics          (synthetic now; real later)
+RepMetrics / SetMetrics          (synthetic demo, or future real metrics)
         ↓
  Decision provider               DECISION_PROVIDER = mock | jev | fallback
         ↓
@@ -97,11 +113,15 @@ Every rep/set can be evaluated and displayed. Spoken coaching normally happens o
 
 ## Where persistence will plug in
 
-Not implemented. Sessions are in-memory in the browser only. A future store (e.g. Tiger Data
-/ Timescale) would persist raw IMU samples, reps, sets, and session analytics behind a small
-storage interface — no schema is committed yet on purpose.
+Raw recordings currently go to local CSV (`data/recordings/`, gitignored). A future store
+(e.g. Tiger Data / Timescale) would persist raw IMU samples, reps, sets, and session
+analytics behind a small storage interface — no schema is committed yet on purpose.
 
 ## Boundaries we deliberately did not cross
 
-No MPU6050 driver, no MCU firmware, no serial/BLE parsing, no raw-IMU feature extraction,
-no rep segmentation, no DTW, no reference-rep comparison, no sensor processing.
+Implemented: MPU6050 I2C driver, ESP32-C5 firmware, BLE transport, packet decode, CSV
+recording, plotting.
+
+Still out of scope until real data exists: rep segmentation, DTW, reference-rep
+comparison, calibration/baselines, and raw-IMU feature extraction. The firmware and BLE
+layer stream continuous data only; they make no rep judgements.

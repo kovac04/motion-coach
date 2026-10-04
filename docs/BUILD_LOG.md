@@ -35,6 +35,14 @@
 - Full synthetic pipeline verified through the running API with all three real
   providers: set → Jev (TOO_FAST, 0.98, 170 ms) → Gemini cue (1.3 s) → ElevenLabs
   `audio/mpeg` (91 KB). No raw sensor data was used.
+- Sensor acquisition milestone: single XIAO ESP32-C5 reads an MPU6050 directly over
+  I2C and streams 18-byte little-endian packets over BLE. PlatformIO config and BLE
+  server boilerplate reused from the reference project `kovac04/auto-lock` (copied, then
+  adapted; provenance recorded in `firmware/esp32-wearable/README.md`). Pins verified
+  from the installed XIAO_ESP32C5 Arduino variant (SDA=GPIO23/D4, SCL=GPIO24/D5), not
+  guessed. Firmware builds (`firmware.bin`, 853,776 bytes). Python bleak client,
+  CSV recorder, and plotter added with 50 passing backend tests. Physical hardware
+  validation is pending (awaiting wiring).
 
 ## Notes
 

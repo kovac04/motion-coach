@@ -130,6 +130,7 @@ export interface CoachingResult {
   rejected: boolean
   reason?: string
   source?: string
+  set_seq?: number
   rep_count?: number
   metrics?: unknown
   decision?: MovementDecision

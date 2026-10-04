@@ -55,6 +55,7 @@ class LiveMotionService:
         self.calibration_result: dict | None = None
         self._pipeline = CoachPipeline(settings)
         self._analyzing = False
+        self._set_seq = 0  # monotonic id for each finalized set (UI de-dup key)
         # calibration state
         self._calibrating = False
         self._cal_phase = "IDLE"  # IDLE | WAITING_STILL | REPS
@@ -256,21 +257,24 @@ class LiveMotionService:
         import asyncio
 
         self.last_completed = completed
-        if completed.rejected:
-            self._maybe_save_debug(completed)
-            self.last_evaluation = {
-                "rejected": True, "reason": completed.reason,
-                "rep_count": completed.rep_count, "metrics": completed.metrics.model_dump(),
-                "source": "live",
-            }
-            logger.info("LIVE SET: rejected (%s)", completed.reason)
-            return
         asyncio.create_task(self._handle_completed(completed))
 
     # --- pipeline ----------------------------------------------------------
     async def _handle_completed(self, completed: CompletedSet) -> dict:
         metrics = completed.metrics
+        self._set_seq += 1
+        set_seq = self._set_seq
         self._maybe_save_debug(completed)
+
+        if completed.rejected:
+            self.last_evaluation = {
+                "rejected": True, "reason": completed.reason,
+                "rep_count": completed.rep_count, "metrics": metrics.model_dump(),
+                "source": "live", "set_seq": set_seq,
+            }
+            logger.info("LIVE SET: rejected (%s)", completed.reason)
+            return self.last_evaluation
+
         logger.info(
             "LIVE SET: source=live rep_count=%d durations=%s duration_ratios=%s "
             "rom_ratios=%s similarities=%s consistency=%s",
@@ -294,7 +298,7 @@ class LiveMotionService:
             logger.exception("live coaching failed")
             self.last_evaluation = {
                 "rejected": True, "reason": str(exc), "rep_count": completed.rep_count,
-                "metrics": metrics.model_dump(), "source": "live",
+                "metrics": metrics.model_dump(), "source": "live", "set_seq": set_seq,
             }
             return self.last_evaluation
         finally:
@@ -312,6 +316,7 @@ class LiveMotionService:
         self.last_evaluation = {
             "rejected": False,
             "source": "live",
+            "set_seq": set_seq,
             "rep_count": completed.rep_count,
             "metrics": metrics.model_dump(),
             "decision": result.decision.model_dump(),

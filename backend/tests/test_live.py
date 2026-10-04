@@ -1,9 +1,13 @@
+import asyncio
+
 import numpy as np
 import pytest
 
+from app.config import Settings
 from app.motion.calibration import build_profile
 from app.motion.live import LiveSetDetector
 from app.sensors.packet import ImuSample
+from app.services.live_coach import LiveMotionService
 
 AXIS = np.array([0.0, 0.0, 1.0])
 
@@ -86,3 +90,18 @@ def test_live_detector_rejects_single_rep():
     assert completed is not None
     assert completed.rejected is True
     assert "insufficient" in completed.reason
+
+
+def test_consecutive_live_sets_have_distinct_seq(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.motion.profiles.PROFILE_DIR", tmp_path)
+    service = LiveMotionService(Settings(decision_provider="mock", language_provider="mock"))
+    service.set_profile(_profile())
+    service.set_auto_finish(False)
+    t, g, _ = _synthetic_rows()
+    for expected_seq in (1, 2):
+        service.start_set()
+        for i in range(len(t)):
+            service.on_sample(_sample(i, t, g))
+        evaluation = asyncio.run(service.finish_set())
+        assert evaluation["rejected"] is False
+        assert evaluation["set_seq"] == expected_seq

@@ -95,7 +95,7 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
   const [showDebug, setShowDebug] = useState(false)
 
   const socketRef = useRef<WebSocket | null>(null)
-  const lastEvalRef = useRef<string>('')
+  const lastAppliedSeqRef = useRef<number | null>(null)
   const finishAtRef = useRef<number | null>(null)
 
   const speak = useCallback(
@@ -118,13 +118,9 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
 
   const applyEvaluation = useCallback(
     (evaluation: CoachingResult, totalFromFinish: boolean) => {
-      if (evaluation.rejected || !evaluation.metrics || !evaluation.decision || !evaluation.coaching) {
+      if (!evaluation.metrics || !evaluation.decision || !evaluation.coaching) {
         return
       }
-      // De-duplicate: the WS may deliver the same evaluation the finish call returns.
-      const key = JSON.stringify(evaluation.coaching)
-      if (key === lastEvalRef.current) return
-      lastEvalRef.current = key
       const mapped: EvaluationResult = {
         metrics: evaluation.metrics as SetMetrics,
         decision: evaluation.decision,
@@ -141,11 +137,35 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
         gemini: Math.round(evaluation.timings_ms?.gemini ?? 0),
       }))
       // decision.should_speak is the source of truth: GOOD sets are shown but not spoken.
-      if (autoSpeak && !evaluation.rejected && evaluation.decision.should_speak) {
+      if (autoSpeak && evaluation.decision.should_speak) {
         void speak(evaluation.coaching.text, totalFromFinish)
       }
     },
     [autoSpeak, speak],
+  )
+
+  // One entry point for every finalized set. De-duplicate by set_seq (not by
+  // coaching text) so repeat GOOD sets still update the UI, and so rejected sets
+  // are shown instead of silently vanishing.
+  const handleEvaluation = useCallback(
+    (evaluation: CoachingResult, totalFromFinish: boolean) => {
+      const seq = evaluation.set_seq
+      if (typeof seq === 'number') {
+        if (seq === lastAppliedSeqRef.current) return
+        lastAppliedSeqRef.current = seq
+      }
+      if (evaluation.rejected) {
+        stopSpeaking()
+        setLiveMetrics(null)
+        setLiveResult(null)
+        setProviders(null)
+        setMessage(`SET_REJECTED — ${evaluation.reason ?? 'not enough valid reps'}`)
+        return
+      }
+      setMessage(null)
+      applyEvaluation(evaluation, totalFromFinish)
+    },
+    [applyEvaluation],
   )
 
   useEffect(() => {
@@ -161,13 +181,7 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
         setMotion(msg.motion)
         setPoints(msg.samples)
         const evaluation = msg.motion.last_evaluation
-        if (evaluation && !evaluation.rejected) {
-          const key = JSON.stringify(evaluation.coaching)
-          if (key !== lastEvalRef.current) {
-            lastEvalRef.current = key
-            applyEvaluation(evaluation, false)
-          }
-        }
+        if (evaluation) handleEvaluation(evaluation, false)
       }
       socket.onclose = () => { if (!closed) retryTimer = window.setTimeout(connect, 1500) }
       socket.onerror = () => socket.close()
@@ -178,7 +192,7 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
       if (retryTimer) window.clearTimeout(retryTimer)
       socketRef.current?.close()
     }
-  }, [applyEvaluation])
+  }, [handleEvaluation])
 
   const connected = status?.connected ?? false
   const mode = motion?.mode ?? 'NO_PROFILE'
@@ -227,20 +241,17 @@ export function LiveView({ voiceMode, onSyntheticTab }: Props) {
     setMessage('Analyzing…')
     const result = await api.motionSetFinish()
     if (result.ok && !result.rejected) {
-      applyEvaluation(result, true)
-      setMessage(null)
+      handleEvaluation(result, true)
       return
     }
     if (result.rejected) {
-      setMessage(result.reason ?? 'Set rejected')
+      handleEvaluation(result, false)
       return
     }
     // No active set: it likely auto-finished already. Show that result if present.
     const current = await api.motionStatus()
-    const evaluation = current.last_evaluation
-    if (evaluation && !evaluation.rejected) {
-      applyEvaluation(evaluation, false)
-      setMessage(null)
+    if (current.last_evaluation) {
+      handleEvaluation(current.last_evaluation, false)
     } else {
       setMessage(result.error ?? 'No active set')
     }

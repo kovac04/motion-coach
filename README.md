@@ -1,4 +1,4 @@
-# Motion Coach — StormHacks 2026
+# Motion Coach
 
 A wearable intelligent movement coach. A wrist IMU is read by an ESP32-C5 over I2C, streamed
 over BLE, segmented into reps, turned into objective metrics, evaluated by a bounded decision

@@ -7,6 +7,10 @@ aloud via ElevenLabs.
 > **This repository was created fresh during the StormHacks 2026 hacking period.** See
 > `docs/BUILD_LOG.md` for initial timestamps and `docs/ARCHITECTURE.md` for the design.
 
+## Demo
+
+▶️ **Watch the demo:** https://www.youtube.com/watch?v=WHgj9EYAbHU
+
 The sensor pipeline is **not built yet**. This repo implements everything *after* the metrics
 boundary and runs end-to-end on synthetic metrics.
 

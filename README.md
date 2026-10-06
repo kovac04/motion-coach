@@ -101,7 +101,7 @@ translation makes gyro excursion unreliable.
 
 ## Provider modes
 
-Set in `.env` (copy `.env.example`):
+Set these values in a local `.env` file:
 
 | Variable | Values | Default |
 | --- | --- | --- |

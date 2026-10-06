@@ -1,18 +1,30 @@
 # Motion Coach
 
-A wearable intelligent movement coach. A wrist IMU is read by an ESP32-C5 over I2C, streamed
-over BLE, segmented into reps, turned into objective metrics, evaluated by a bounded decision
-model (Jev), phrased by Gemini, and spoken by ElevenLabs.
+[![CI](https://github.com/kovac04/motion-coach/actions/workflows/ci.yml/badge.svg)](https://github.com/kovac04/motion-coach/actions/workflows/ci.yml)
+![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![React + TypeScript](https://img.shields.io/badge/React%20%2B%20TypeScript-20232A?logo=react&logoColor=61DAFB)
 
-The movement is **measured deterministically**, **evaluated intelligently**, and **coached
-naturally** — not "accelerometer data handed to an LLM".
+Motion Coach is a wearable movement-analysis system that streams wrist IMU data from an
+ESP32-C5 over BLE and provides real-time exercise feedback.
 
-> Created fresh during the StormHacks 2026 hacking period. See `docs/BUILD_LOG.md` for
-> provenance/timestamps and `docs/ARCHITECTURE.md` for the design.
+Movement is calibrated, segmented, and scored with deterministic signal processing. Jev,
+Gemini, and ElevenLabs are limited to bounded issue selection, cue phrasing, and voice delivery.
 
-## Demo
+[![Motion Coach dashboard analyzing a five-rep set](docs/assets/dashboard.png)](https://www.youtube.com/watch?v=WHgj9EYAbHU)
 
-▶️ **Watch the demo:** https://www.youtube.com/watch?v=WHgj9EYAbHU
+**[Watch the demo (3:24)](https://www.youtube.com/watch?v=WHgj9EYAbHU)**
+
+## Technical highlights
+
+- **Reliable sensor path:** samples a 6-axis IMU at 50 Hz, transports custom 18-byte BLE
+  packets, and handles sequence gaps, backpressure, and automatic reconnection.
+- **Mounting-independent analysis:** learns the dominant movement axis with PCA, segments reps
+  with a deterministic state machine, and computes per-rep and set-level metrics.
+- **Bounded, fail-soft coaching:** establishes candidate deviations from robust metrics before
+  invoking AI providers, falls back deterministically on provider failures, and is covered by
+  99 backend tests.
+
+## Architecture
 
 ```text
 MPU6050 --I2C--> XIAO ESP32-C5 --BLE 50 Hz--> Mac
@@ -35,11 +47,6 @@ MPU6050 --I2C--> XIAO ESP32-C5 --BLE 50 Hz--> Mac
   React dashboard (live) / spoken coaching
 ```
 
-## Stack
-
-Python 3.12 · FastAPI · Pydantic · uv · bleak · numpy · Vite · React · TypeScript · pytest ·
-PlatformIO (ESP32-C5). No Docker, no queue, no database (in-memory demo state only).
-
 ## Quick start
 
 ```bash
@@ -54,7 +61,12 @@ The dashboard has two clearly separated tabs:
 - **LIVE WEARABLE** — the real pipeline. Requires `SENSOR_ENABLED=true` in `.env` and the
   powered wearable in BLE range.
 
-Everything falls back deterministically, so a provider or network outage never kills the demo.
+Provider and network failures fall back to deterministic behavior without interrupting the demo.
+
+## Stack
+
+Python 3.12 · FastAPI · Pydantic · uv · bleak · NumPy · Vite · React · TypeScript · pytest ·
+PlatformIO (ESP32-C5)
 
 ## Live wearable flow
 
@@ -77,16 +89,15 @@ objectively-detected deviation is. The UI labels **VOICE: ELEVENLABS** vs **BROW
 | D. Language | Gemini | one concise end-of-set cue (15-25 words, max 32) |
 | E. Voice | ElevenLabs | speaks the final text (`mp3_44100_128`, `eleven_v4_turbo`) |
 
-Jev can never invent an issue the measurements did not establish; a clearly good set never
-reaches Jev and is never spoken. See `docs/MOTION.md`.
+Jev receives only deviations established by deterministic metrics. Clearly good sets bypass Jev
+and spoken coaching. See `docs/MOTION.md`.
 
 ## Exercises
 
 Live-selectable: **Bicep Curl, Lateral Raise, Triceps Extension, Front Raise**. Each learns
 its own PCA axis and saves its own profile (`data/profiles/<id>.json`); nothing is shared.
-Bench press is intentionally excluded (wrist translation makes the gyro excursion unreliable).
-This proves *exercise-specific calibration adapts one generic pipeline*, not that any movement
-works.
+The pipeline targets cyclical wrist rotation, so bench press is excluded because wrist
+translation makes gyro excursion unreliable.
 
 ## Provider modes
 
@@ -127,7 +138,7 @@ make live-debug FILE=data/debug/live-set-….csv   # replay a saved live set
 
 Recording protocol: `docs/DATA_COLLECTION.md`.
 
-## Hardware / sensor pipeline (built)
+## Hardware and sensor pipeline
 
 Single XIAO ESP32-C5 reads an MPU6050 directly over I2C and streams 18-byte little-endian
 packets over BLE at ~50 Hz; the Mac is the BLE central.
@@ -142,14 +153,16 @@ packets over BLE at ~50 Hz; the Mac is the BLE central.
 `rom_deg` is **movement excursion relative to the personal reference**, not true joint angle.
 The detector fits clear cyclical rotational wrist motion.
 
-## Tests
+## Testing
 
 ```bash
-make test-backend   # 99 tests: models, scenarios, providers, API, pipeline, BLE packets,
-                    # recorder, calibration phases, exercise switching, decision assessment
+make test   # 99 backend tests + frontend production build
+make lint   # frontend lint
 ```
 
-The application works with zero API keys and without BLE hardware — enforced by tests.
+CI runs the backend suite and frontend lint/build on every push and pull request. Tests cover BLE
+packet parsing and buffering, APIs and WebSockets, calibration and segmentation, exercise
+switching, provider boundaries, and fallback behavior. No API keys or BLE hardware are required.
 
 ## Docs
 
@@ -159,3 +172,9 @@ The application works with zero API keys and without BLE hardware — enforced b
 - `docs/API.md` — HTTP/WebSocket endpoints
 - `docs/JEV_PROVIDER.md` — the verified Jev (TypeSafe) contract
 - `docs/BUILD_LOG.md` — provenance / timestamps
+
+## Project provenance
+
+Motion Coach was built during StormHacks 2026. Development timestamps and implementation
+milestones are recorded in `docs/BUILD_LOG.md`; architectural decisions are documented in
+`docs/ARCHITECTURE.md`.
